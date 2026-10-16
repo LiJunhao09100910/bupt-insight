@@ -9,6 +9,8 @@ import time
 from core.browser import Session
 from core.config import resolve
 from core.schema import Item
+from core.errors import InsightError, safe_error
+from core.progress import update as progress
 
 JS_ROWS = """() => {
     const t = document.querySelector('table.board-list');
@@ -23,7 +25,7 @@ JS_ROWS = """() => {
         const cells = tds.map(c => c.innerText.replace(/\\s+/g, ' ').trim());
         out.push({
             title: (a.innerText || '').trim(),
-            url: 'https://bbs.byr.cn' + a.getAttribute('href').replace(/^#!?/, '/'),
+            url: new URL(a.getAttribute('href').replace(/^#!?/, ''), 'https://bbs.byr.cn').href,
             author: (cells[3] || '').replace(/^\\|\\s*/, ''),
             published: cells[2] || '',
             replies: parseInt(cells[4] || '0', 10) || 0,
@@ -48,18 +50,32 @@ def read(cfg, url: str, max_chars: int = 1200) -> tuple[str, str]:
     with Session(cfg, "byr") as s:
         page = s.new_page()
         page.goto(url, wait_until="domcontentloaded", timeout=40000)
-        page.wait_for_timeout(1200)
+        check_login(page, s)
+        page.wait_for_selector("td.a-content", timeout=40000)
         body = page.evaluate(JS_BODY) or ""
         return page.title(), re.sub(r"\n{3,}", "\n\n", body.strip())[:max_chars]
 
 
 def load_watchlist(cfg, only=None):
-    wl = json.loads(resolve(cfg, "watchlist.json").read_text(encoding="utf-8"))
+    wl = json.loads(resolve(cfg, cfg["sources"]["byr"].get("watchlist", "watchlist.json")).read_text(encoding="utf-8"))
     wl = {k: v for k, v in wl.items() if not k.startswith("_")}
     if only:
         want = {b.strip() for b in only.split(",")}
         wl = {k: v for k, v in wl.items() if k in want}
+    configured = cfg["sources"]["byr"].get("boards")
+    if configured and not only:
+        wl = {k: v for k, v in wl.items() if k in configured}
+    if not wl:
+        raise InsightError("configuration_error", "BYR 关注版面为空或版面代号不在 watchlist.json")
     return wl
+
+
+def check_login(page, session):
+    if not session.cookie("nforum[UTMPUSERID]", "login-user"):
+        raise InsightError("login_expired", "BYR 会话失效，请重新运行 login byr")
+    if page.locator('form[action="/login"] input[name="passwd"]').count():
+        if page.locator('form[action="/login"] input[name="passwd"]').first.is_visible():
+            raise InsightError("login_expired", "BYR 返回访客登录表单，请重新登录")
 
 
 def fetch(cfg, only=None, quiet=False):
@@ -76,9 +92,9 @@ def fetch(cfg, only=None, quiet=False):
     with Session(cfg, "byr") as s:
         user = s.cookie("nforum[UTMPUSERID]", "login-user")
         if not user:
-            raise SystemExit("会话失效，请重跑：python run.py login byr")
+            raise InsightError("login_expired", "BYR 会话失效，请重跑 python run.py login byr")
         if not quiet:
-            print(f"SESSION ok: {user}   版面 {len(watch)} 个")
+            print(f"BYR 会话待业务验证，版面 {len(watch)} 个")
 
         page = s.new_page()
 
@@ -88,27 +104,63 @@ def fetch(cfg, only=None, quiet=False):
                 try:
                     page.goto(f"https://bbs.byr.cn/board/{board}",
                               wait_until="domcontentloaded", timeout=timeout)
+                    check_login(page, s)
                     page.wait_for_selector("table.board-list tr", timeout=20000)
                     page.wait_for_timeout(400)
-                    return page.evaluate(JS_ROWS)[:rows_per]
+                    rows = page.evaluate(JS_ROWS)[:rows_per]
+                    if not rows:
+                        raise InsightError("structure_changed", "BYR 列表没有可解析帖子；请检查版面或选择器")
+                    return rows
                 except Exception as e:
+                    if isinstance(e, InsightError) and e.status == "login_expired":
+                        raise
                     last = e
                     page.wait_for_timeout(800)
             raise last
 
         for board, meta in watch.items():
+            progress(cfg, "byr", "board_list", board=board)
             time.sleep(delay)
             try:
                 rows = grab(board)
                 fetched[board] = [
-                    Item(source="byr", channel=meta["name"], **r) for r in rows
+                    Item(source="byr", channel=meta["name"], private=cfg["sources"]["byr"].get("private", False),
+                         extra={"body_status": "pending"}, **r) for r in rows
                 ]
+                for item_index, item in enumerate(fetched[board], start=1):
+                    progress(cfg, "byr", "post_body", board=board, current=item_index, total=len(fetched[board]))
+                    for attempt in range(max(1, tries)):
+                        time.sleep(delay)
+                        try:
+                            page.goto(item.url, wait_until="domcontentloaded", timeout=timeout)
+                            check_login(page, s)
+                            page.wait_for_selector("td.a-content", timeout=timeout)
+                            item.body = (page.evaluate(JS_BODY) or "").strip()
+                            if not item.body:
+                                raise InsightError("structure_changed", "BYR 正文为空")
+                            item.extra["body_status"] = "ok"
+                            break
+                        except Exception as exc:
+                            status, message = safe_error(exc)
+                            item.extra["body_status"] = status
+                            if status == "login_expired" or attempt == max(1, tries) - 1:
+                                errors.append(f"{status}: {board} 正文读取失败：{message}")
+                                if status == "login_expired":
+                                    return fetched, watch, errors
+                                break
                 if not quiet:
                     print(f"  {board:18} {meta['name']:16} {len(rows):>3} 条")
             except Exception as e:
                 fetched[board] = []
-                errors.append(f"{board}: {type(e).__name__} {str(e)[:60]}")
+                status, message = safe_error(e)
+                errors.append(f"{status}: {board}: {message}")
                 if not quiet:
-                    print(f"  {board:18} FAILED {str(e)[:50]}")
+                    print(f"  {board:18} {status}")
+
+        from core.security import write_state
+        # Migrate legacy BYR JSON on successful scan; retain old file until explicit logout.
+        if any(fetched.values()):
+            target = s.state_path.with_suffix(".bin") if s.state_path.suffix == ".json" else s.state_path
+            write_state(target, s.ctx.storage_state())
 
     return fetched, watch, errors

@@ -1,0 +1,16 @@
+is_example: false
+grade: ""
+major: ""
+stage: ""
+research_interests: []
+skills: []
+projects: []
+competitions: []
+goals: []
+opportunities: []
+uninterested: []
+interests: [] # 可配置name、terms同义词、intents机会意图、avoid冲突词、description
+preferences:
+  ordinary: digest
+  relevant: immediate # 可改为digest让普通相关信息也汇总；强制教务仍受保护
+  archive_uninterested: false

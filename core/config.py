@@ -1,5 +1,6 @@
 """全局路径与配置加载。所有模块都从这里取配置，别各自硬编码。"""
 import pathlib
+import os
 
 import yaml
 
@@ -20,7 +21,7 @@ def load_rules() -> dict:
 
 def resolve(cfg, relpath: str) -> pathlib.Path:
     """把 config 里的相对路径解析成绝对路径。"""
-    p = pathlib.Path(relpath)
+    p = pathlib.Path(os.path.expandvars(relpath))
     return p if p.is_absolute() else ROOT / p
 
 

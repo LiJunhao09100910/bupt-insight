@@ -13,3 +13,21 @@ inbox/*.md
 __pycache__/
 *.pyc
 .venv/
+.test-output/
+.pytest_cache/
+*.bin
+*.bin.tmp
+*.sqlite3*
+.env
+.local/
+profile.yaml
+profile.*.local.yaml
+*.log
+.coverage
+htmlcov/
+*.pid
+*.sqlite*
+
+# 实际联调证据仅保留本地；虚构样本评估可公开
+docs/*.json
+!docs/phase2-evaluation.json

@@ -1,7 +1,7 @@
 """浏览器会话管理。所有源共用一套逻辑，别每个源各写一遍。
 
-设计前提：**不逆向登录协议。** 人在真实浏览器里登一次，我们把 storage_state 存下来，
-之后无头复用。验证码、站点改版、token 兑换这些事情因此全部不存在。
+BYR 继续使用官方浏览器人工登录与 storage_state。门户认证单独由 PortalAuthenticator 管理。
+会话复用不保证永久有效；验证码、权限变化和页面改版必须如实报告。
 """
 import os
 import pathlib
@@ -10,25 +10,7 @@ import shutil
 
 from playwright.sync_api import sync_playwright
 
-# 有些校内老系统会直接拦自动化浏览器（页面上直接写「不支持该浏览器」）。
-# 两件事要同时做：装成正常浏览器（去掉 automation 开关、补 navigator 字段），
-# 以及尽量用本机真实的 Edge/Chrome —— UA 和指纹都是真的，不用跟网站玩猜谜。
-STEALTH_ARGS = [
-    "--disable-blink-features=AutomationControlled",
-    "--disable-infobars",
-    "--no-first-run",
-    "--no-default-browser-check",
-]
-
-STEALTH_JS = """
-try {
-  Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-  Object.defineProperty(navigator, 'languages',
-      {get: () => ['zh-CN', 'zh', 'en-US', 'en']});
-  Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-  window.chrome = window.chrome || {runtime: {}};
-} catch (e) {}
-"""
+BROWSER_ARGS = []  # 不隐藏自动化标记，不绕过学校浏览器/访问策略。
 
 _WIN_EDGE = [r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
              r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"]
@@ -110,16 +92,15 @@ def launch(pw, cfg=None, headless=True):
     if not net.get("executable_path") and which in _CHANNEL:
         try:
             return pw.chromium.launch(headless=headless, channel=_CHANNEL[which],
-                                      args=STEALTH_ARGS)
+                                      args=BROWSER_ARGS)
         except Exception:
             pass  # 没装那个浏览器就退回自带 chromium，别让整条链路挂掉
     return pw.chromium.launch(headless=headless, executable_path=browser_exe(cfg),
-                              args=STEALTH_ARGS)
+                              args=BROWSER_ARGS)
 
 
 def harden(ctx):
-    """给 context 打伪装补丁。每个 context 都要打，不是每个 page。"""
-    ctx.add_init_script(STEALTH_JS)
+    """保留原接口；不再修改浏览器指纹。"""
     return ctx
 
 
@@ -131,6 +112,14 @@ class Session:
         self.cfg = cfg
         self.key = source_key
         self.state_path = _resolve_session(cfg, src["session"])
+        if source_key == "byr" and self.state_path.suffix == ".json":
+            encrypted = self.state_path.with_suffix(".bin")
+            if encrypted.exists():
+                self.state_path = encrypted
+        if source_key == "byr" and not self.state_path.exists():
+            legacy = self.state_path.with_suffix(".json")
+            if legacy.exists():
+                self.state_path = legacy
         self.base = src.get("base") or next(
             (l["url"] for l in src.get("lists", [])), None)
         # 公开的公告页不需要登录。默认 true，只有明确标 false 的源允许匿名抓
@@ -141,19 +130,25 @@ class Session:
         self.ctx = None
 
     def __enter__(self):
+        from core.security import read_state
+        from core.errors import InsightError
         has_state = self.state_path.exists()
         self.logged_in = has_state
         if not has_state:
             if self.requires_login:
-                raise SystemExit(
+                raise InsightError("login_expired",
                     f"[{self.state_path.name}] 没有会话快照。"
                     f"先跑：python run.py login {self.key}")
             print(f"  （{self.key} 无会话，按公开页匿名抓取）")
 
-        self._pw = sync_playwright().start()
-        self._browser = launch(self._pw, self.cfg, headless=True)
-        state = str(self.state_path) if has_state else None
-        self.ctx = harden(self._browser.new_context(storage_state=state))
+        try:
+            self._pw = sync_playwright().start()
+            self._browser = launch(self._pw, self.cfg, headless=True)
+            state = read_state(self.state_path, allow_legacy=self.key == "byr") if has_state else None
+            self.ctx = harden(self._browser.new_context(storage_state=state))
+        except Exception:
+            self.__exit__()
+            raise
         return self
 
     def __exit__(self, *exc):
@@ -237,6 +232,8 @@ def login(source_key: str, start_url: str, wait_seconds: int = 300, probe=None,
     cfg = load_config()
     dst = resolve(cfg, f"{cfg['paths']['session_dir']}/"
                        f"{cfg['sources'][source_key]['session']}")
+    if dst.suffix == ".json":
+        dst = dst.with_suffix(".bin")
     dst.parent.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as p:
@@ -247,7 +244,7 @@ def login(source_key: str, start_url: str, wait_seconds: int = 300, probe=None,
 
         before = probe(page) if probe else None
         print(f"\n浏览器已打开 {start_url}")
-        print(f"请在窗口里登录。当前状态：{before or '未登录'}")
+        print("请在窗口里登录。登录标记不会输出到日志。")
         print(f"最多等 {wait_seconds} 秒，登录后脚本会自动接管。\n")
 
         deadline = time.time() + wait_seconds
@@ -261,8 +258,9 @@ def login(source_key: str, start_url: str, wait_seconds: int = 300, probe=None,
                 if verify and not _safe(verify, page):
                     print("  状态变了但自检没过（还被踢回登录页），继续等你操作…")
                     continue
-                ctx.storage_state(path=str(dst))
-                print(f"登录成功：{str(now)[:80]}")
+                from core.security import write_state
+                write_state(dst, ctx.storage_state())
+                print("登录通过业务页面验证，会话已加密保存")
                 print(f"会话已存到 {dst}  （别让它进 git）")
                 ctx.close()
                 b.close()

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="csrf-token" content="{{ csrf }}"><title>BUPT Insight · 校园信息</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23276050'/%3E%3Cpath d='M11 11h10a5 5 0 010 10H11m0 0h12a5 5 0 010 10H11V11' stroke='white' stroke-width='3' fill='none'/%3E%3C/svg%3E"><link rel="stylesheet" href="/static/reader.css"><script defer src="/static/reader.js"></script></head>
+<body>
+<aside class="sidebar" aria-label="主导航">
+  <a class="brand" href="/"><span class="brand-mark">B<span>i</span></span><span>BUPT Insight<small>把校园里的好机会，留给你</small></span></a>
+  <div class="nav-label">我的信息流</div>
+  <nav id="navigation">
+    <button data-view="recommended" class="nav-item active"><span>✦</span> 为你推荐 <b id="nav-recommended"></b></button>
+    <button data-view="latest" class="nav-item"><span>◷</span> 最新收录</button>
+    <button data-view="unread" class="nav-item"><span>◉</span> 未读信息 <b id="nav-unread">—</b></button>
+    <button data-view="favorites" class="nav-item"><span>☆</span> 我的收藏 <b id="nav-favorites"></b></button>
+    <button data-view="all" class="nav-item"><span>▤</span> 全部历史</button>
+    <button data-view="hidden" class="nav-item subdued"><span>⊖</span> 不感兴趣</button>
+  </nav>
+  <div class="sidebar-note"><span class="privacy-dot"></span> 只在你的电脑上<small>原文与阅读记录本地保存<br>不调用云端 AI，不上传校园信息</small></div>
+  <button class="sidebar-help" id="help-button">日常使用与数据说明 <span>↗</span></button>
+</aside>
+<div class="workspace">
+  <header class="topbar"><div class="breadcrumb">校园信息 <span>/</span> <strong id="breadcrumb-view">为你推荐</strong></div><div class="topbar-right"><span id="today-label"></span><button id="refresh" class="icon-button" title="刷新本地信息">↻</button></div></header>
+  <main>
+    <section class="intro"><div><div class="eyebrow">YOUR CAMPUS, AT A GLANCE</div><h1 id="view-title">值得关注的校园动态<span>✦</span></h1><p id="view-subtitle">科研、实习与竞赛机会，不错过，也不必一条条找。</p></div><div class="intro-stamp"><strong>BUPT</strong><span>校园信息阅读器</span></div></section>
+    <section class="source-strip" aria-label="采集状态"><div class="strip-label"><span class="pulse"></span> 自动更新</div><div class="source-state" id="portal-status">信息门户 · 正在读取状态</div><div class="source-state" id="byr-status">北邮人论坛 · 正在读取状态</div><button id="status-details" class="text-button">运行详情 ↗</button></section>
+    <div id="new-banner" class="new-banner" hidden>发现新收录或正文更新，点击刷新查看 <button id="load-new">查看更新 ↗</button></div>
+    <section class="toolbar"><div class="search-box"><span>⌕</span><input id="search" type="search" placeholder="搜索标题、来源或正文…" aria-label="搜索校园信息"><kbd>/</kbd></div><select id="source-filter" aria-label="信息来源"><option value="">全部来源</option><option value="portal">信息门户</option><option value="byr">北邮人论坛</option></select><select id="sort" aria-label="排序"><option value="recommended">推荐优先</option><option value="published">发布时间</option><option value="collected">收录 / 更新时间</option></select></section>
+    <nav class="topics" id="topics" aria-label="主题分类"><button class="topic active" data-category="">全部主题</button><button class="topic" data-category="research">科研机会</button><button class="topic" data-category="competition">竞赛</button><button class="topic" data-category="internship">实习就业</button><button class="topic" data-category="electronics">电子科创</button><button class="topic" data-category="event">校园活动</button><button class="topic" data-category="mandatory_academic">教务通知</button></nav>
+    <div class="list-header"><span><strong id="result-count">—</strong> 条信息 <span id="list-context">· 未读优先，基于你的本地兴趣</span></span><span class="quiet">点开阅读 · 收藏留待以后</span></div>
+    <div id="error-banner" class="error-banner" role="alert" hidden></div>
+    <section id="feed" aria-live="polite"><div class="loading">正在整理你的校园信息…</div></section>
+    <footer class="list-footer"><span id="pagination-label"></span><div><button id="prev-page" class="secondary-button">上一页</button><button id="next-page" class="secondary-button">下一页</button></div></footer>
+    <div class="page-note">推荐只是线索，资格与报名时间请以原文为准。所有收录信息都能在“全部历史”中找到。</div>
+  </main>
+</div>
+<div id="drawer-backdrop" hidden></div><aside id="reader-drawer" class="reader-drawer" aria-label="信息详情" aria-modal="true" role="dialog" hidden><div class="drawer-bar"><span>阅读详情</span><button id="close-reader" class="icon-button" aria-label="关闭详情">×</button></div><div id="reader-content"></div></aside>
+<dialog id="info-dialog"><button id="close-info" class="icon-button" aria-label="关闭说明">×</button><h2 id="info-title">日常使用</h2><div id="info-content"></div></dialog><div id="toast" class="toast" role="status" hidden></div>
+</body></html>

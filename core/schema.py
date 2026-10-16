@@ -30,6 +30,8 @@ class Item:
     score: int = 0
     reasons: typing.List[str] = dataclasses.field(default_factory=list)
     extra: dict = dataclasses.field(default_factory=dict)
+    body: str = ""
+    private: bool = False
 
     def __post_init__(self):
         # 网页 innerText 常带着换行和整段摘要。收敛成一行，否则表格和 inbox 全被顶歪
@@ -37,7 +39,12 @@ class Item:
 
     def key(self) -> str:
         """去重用主键：URL 去掉查询串。"""
-        return self.url.split("?")[0].rstrip("/")
+        # Query parameters may contain the portal's notice ID. Never collapse them.
+        from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+        p = urlsplit(self.url)
+        query = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True)
+                 if k.lower() not in ("ticket", "jsessionid") and not k.lower().startswith("utm_")]
+        return urlunsplit((p.scheme, p.netloc, p.path.rstrip("/"), urlencode(sorted(query)), p.fragment))
 
     _DATE_RE = re.compile(r"(20\d{2})[-/年.](\d{1,2})[-/月.](\d{1,2})")
 

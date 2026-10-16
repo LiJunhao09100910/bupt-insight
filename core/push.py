@@ -196,22 +196,15 @@ def _send_feishu(ch, title, text):
 
 
 def _send_serverchan(ch, title, text):
-    key = ch.get("key")
-    if not key:
-        return False, "缺 key"
-    s, b = _post(f"https://sctapi.ftqq.com/{key}.send",
-                 {"title": title[:100], "desp": text})
-    return s == 200, f"HTTP {s} {b[:120]}"
+    from core.notifications import wechat
+    result = wechat("serverchan", title, text, token=ch.get("key"))
+    return result.status == "accepted", result.detail
 
 
 def _send_pushplus(ch, title, text):
-    tok = ch.get("token")
-    if not tok:
-        return False, "缺 token"
-    s, b = _post("https://www.pushplus.plus/send",
-                 {"token": tok, "title": title[:100], "content": text,
-                  "template": ch.get("template", "txt")})
-    return s == 200, f"HTTP {s} {b[:120]}"
+    from core.notifications import wechat
+    result = wechat("pushplus", title, text, token=ch.get("token"))
+    return result.status == "accepted", result.detail
 
 
 def _send_bark(ch, title, text):
@@ -305,7 +298,7 @@ def send(cfg, title, text, only=None) -> list[tuple[str, bool, str]]:
                 else:
                     ok, detail = fn(ch, title, text)
         except Exception as e:
-            ok, detail = False, f"{type(e).__name__}: {e}"
+            ok, detail = False, f"{type(e).__name__}: 发送失败，原始异常不记录"
         results.append((name, ok, detail))
     log_send(cfg, title, results)
     return results

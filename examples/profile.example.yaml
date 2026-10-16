@@ -1,0 +1,22 @@
+# 全部为虚构资料。禁止将本文件直接作为真实个人画像。
+is_example: true
+grade: 大三
+major: 虚构计算机专业
+stage: 本科
+research_interests: [机器学习, 网络安全]
+skills: [Python, Linux]
+projects: [虚构课程推荐系统]
+competitions: [虚构程序设计校赛]
+goals: [科研实践, 实习]
+opportunities: [科研, 实习, 竞赛]
+uninterested: [二手交易]
+interests:
+  - name: 虚构科研参与方向
+    terms: [科研, 实验室, research assistant]
+    intents: [招募, 招新, 申请, 开放]
+    avoid: []
+    description: "仅为示例；应填写本人具体希望参与什么，不能当作资格证明。"
+preferences:
+  ordinary: digest
+  relevant: digest
+  archive_uninterested: true

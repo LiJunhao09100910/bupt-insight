@@ -1,250 +1,114 @@
-# bupt-information-collector
+# BUPT Insight
 
-**把「今天该看的信息」从两个地方捞出来，过滤掉噪音，只把要动手的那几条推到你手机上。**
+一个只在个人电脑上运行的北邮校园信息阅读器。把信息门户和北邮人论坛集中在一个页面：浏览科研、竞赛、实习、电子科创与教务信息，阅读、搜索、收藏，并按本人兴趣获得可解释的推荐。
 
-它监听两类源：**校园信息门户**（教务 / 学院 / 学生处的通知公告）和**北邮人论坛**（科研进组、
-实习内推、竞赛招募）。每天定时扫三遍，过滤、去重、打分，然后通过**飞书**把「截止 / 报名 / 招募」
-这类需要你动手的条目推出去 —— 人在外面、没开电脑也能收到。
+**本地地址：[http://127.0.0.1:8765](http://127.0.0.1:8765)**
 
-说白了就是**一个信息监听器**：监听 → 去重 → 打分 → 推送，到手机为止。
-它不排日程，也不做目标管理 —— 那些是另一个问题，这个仓库不假装能一起解决。
+## 每天怎么用
 
----
+本机已经配置好：双击桌面 **BUPT Insight** 即可打开。也可以双击项目目录的 **打开 BUPT Insight.cmd**。
 
-## 先说清楚：谁 clone 下来能直接用
+- **为你推荐**：未读优先；较早历史放后面，推荐只是线索。
+- **最新收录**：查看新收录或正文更新，发布时间单独显示。
+- **全部历史**：不受推荐结果限制，按主题、来源、关键词查找。
+- 点标题打开完整阅读面板，或打开学校/论坛原文。
+- 阅读、收藏与反馈保存在本机；正文真正变化后会重新标为未读。
+- 不感兴趣的内容可以恢复，不会永久删除；重要教务事项受保护。
 
-**这个仓库是为北邮写的**，两个源都是北邮的站点：
+关闭浏览器即可结束阅读。若想停止本地网页服务，双击桌面 **关闭 BUPT Insight** 或同名cmd。它只停止阅读服务，**不会停止Windows定时采集**。再次双击打开即可重新启动；重复打开不会再创建一个服务。
 
-| 源 | 通用性 | 换学校要改什么 |
-|---|---|---|
-| `sources/portal.py` 信息门户 | **通用**。它不认具体站点，只找「链接 + 邻近日期」这种列表行 | 改 `config.yaml` 里 `sources.portal.lists` 的 URL |
-| `sources/byr.py` 北邮人论坛 | **北邮专属**。登录态（`UTMPUSERID` cookie）、版面代号（`Paper` / `Robot`…）、正文选择器（`td.a-content`）都绑死在 BYR 上 | 得另写一个源 |
+## Windows 11 安装
 
-所以：
-
-- **北邮的同学** —— clone 下来五分钟能用，`run.py login byr` 登一次就行。
-- **别的学校的同学** —— 能直接复用的是**中间三层**（去重 / 打分 / 推送）和通用的 `portal.py`。
-  要接自己的论坛或教务，写一个源即可，契约只有一个。
-
-### 写一个新源要做的全部事情
-
-1. 新建 `sources/<名字>.py`，实现两个函数：
-
-```python
-def fetch(cfg, only=None, quiet=False):
-    """返回 (items_by_channel, watch, errors)
-
-    items_by_channel : {栏目名: [Item, ...]}
-    watch            : None 即可（给「关注某个帖子」这类需求预留的）
-    errors           : 抓失败的信息列表。会打印出来，但不影响别的源
-    """
-
-def read(cfg, url, max_chars=1200):
-    """返回 (title, body) —— 给 `run.py read <目标>` 用"""
-```
-
-2. 在 `sources/__init__.py` 的 `REGISTRY` 里加一行。
-3. 在 `config.yaml` 的 `sources:` 下加一段配置。`run.py scan <名字>` 就能跑。
-
-**`Item` 是全系统唯一的契约**（`core/schema.py`）：`source / channel / title / url` 必填，
-其余字段能给就给 —— 其中 `deadline` 最值钱，给了它推送会把这行排到最前面。
-下游三层（去重 / 打分 / 推送）完全不关心数据是从哪来的。
-
----
-
-## 解决的问题
-
-信息本身不贵，**漏掉信息的代价才贵**。保研报名、进组招募、实习内推这类通知，共同点是：
-
-1. 分散在好几个站点，每个都要手动点开翻；
-2. 通知列表和论坛帖子页**改版一次，你自己写的爬虫就全废**；
-3. 绝大多数是噪音（二手转让、灌水、别的届的校招），真正相关的可能一天就一条；
-4. 看到了才算数 —— 只写进本地文件而没推到手机，等于没看。
-
-所以这个东西的设计目标很窄：**别漏，别吵**。
-
----
-
-## 它怎么工作
-
-```
-        采集              去重                判读              推送
-  ┌─────────────┐   ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-  │ 信息门户     │   │ 增量 diff    │   │ 加权打分     │   │ 飞书 webhook│
-  │ (公开公告页) │──▶│ seen 快照    │──▶│ rules.yaml   │──▶│ 只推要动手的 │
-  │ 北邮人论坛   │   │ 跨栏目折叠   │   │ 词表可调     │   │ 到手机      │
-  │ (会话快照)   │   │             │   │             │   │             │
-  └─────────────┘   └─────────────┘   └─────────────┘   └─────────────┘
-        ▲                                                        │
-        └──────────────── 每天 07:30 / 12:30 / 19:00 ─────────────┘
-```
-
-四层各自独立，加一个新源的成本只有「写个函数产出 `Item`」，其余全都不用动。
-
----
-
-## 快速开始
-
-```bash
-git clone <this-repo> && cd bupt-information-collector
-
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-playwright install chromium
-
-cp config.example.yaml config.yaml
-#   编辑 config.yaml：填 push.channels.feishu.webhook，改 sources.portal.lists 为你自己学校的列表页
-
-python run.py login byr      # 开浏览器登一次论坛，会话存成快照，之后无头复用
-python run.py cold           # 冷启动：建去重基线，一条都不推
-python run.py scan --push    # 真正扫一遍并推手机
-```
-
-设成定时任务（Windows）：
+需要Python 3.12和Microsoft Edge。在项目目录运行：
 
 ```powershell
-# 管理员 PowerShell
-.\deploy\Install.ps1
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -X utf8 run.py init
 ```
 
-Linux / macOS 用 cron：
+第一次使用的新电脑需要本地配置账号和采集适配器：
 
-```cron
-30 7  * * *  cd /path/to/bupt-information-collector && .venv/bin/python run.py scan --push --heartbeat
-30 12,19 * * *  cd /path/to/bupt-information-collector && .venv/bin/python run.py scan --push
+```powershell
+.\.venv\Scripts\python.exe -X utf8 run.py credentials save
+.\.venv\Scripts\python.exe -X utf8 run.py portal test --mode http
+.\.venv\Scripts\python.exe -X utf8 run.py login byr
+.\.venv\Scripts\python.exe -X utf8 run.py scan --baseline
 ```
 
-### `--heartbeat` 是干什么的
+账号密码只在本地不回显输入，写入Windows Credential Manager。config.example.yaml的门户身份与列表字段需要按本人授权页面校准，**模板不能直接代替真实配置**。本机已完成配置，无须重新输入账号或重建基线。详细认证/适配说明见[CLI与安装指南](docs/CLI-GUIDE.md)。
 
-没有新内容时 `scan --push` 是**故意不推**的（不打扰）。但这样有个副作用：
-「今天平安无事」和「计划任务根本没跑」在手机上长得**一模一样**——都是没消息。
+安装桌面快捷方式：
 
-所以每天固定那一次加上 `--heartbeat`：扫完主动报一句
-
-```
-[10-05] 扫描完成
-2026-10-05 扫描完成。没有新条目 —— 今天没有要你看的东西。
+```powershell
+powershell.exe -NoProfile -File deploy/Install-ReaderShortcuts.ps1
 ```
 
-**光报条数不算数，还得说清是什么。** 够不到动手线（默认 12 分）的条目一条都不会单独推送，
-只报个「4 条」等于告诉他"有事"却不说是什么事。所以心跳会把它们直接列出来：
+也可以手动启动，关闭时按Ctrl+C：
 
-```
-2026-10-06 扫到 4 条新内容。
-其中 1 条够格单独推送的，已经发过了。
-
-下面这些没单独推，贴一下：
-· [3分] 【实习】字节跳动27届校招实习
-  https://bbs.byr.cn/article/ParttimeJob/989324
-· [6分] 【一只Sara硕-分享】100家央国企投递名单
-  https://bbs.byr.cn/article/ParttimeJob/989201
+```powershell
+.\.venv\Scripts\python.exe -X utf8 run.py web --open
 ```
 
-超过 6 条只列前 6 条，其余指向 `inbox/`。`run.py doctor` 里也能看到最后一次扫描的时间，
-超过正常间隔一眼就能看出来。
+服务只监听127.0.0.1，默认端口8765；不支持通过参数开放公网。端口冲突时可用`web --port 8766 --open`。双击脚本仅对本次可信本地脚本使用ExecutionPolicy Bypass，不修改Windows全局策略；也可使用上面正常PowerShell方式启动。
 
-**一个只在有事时才说话的监控，等于没有监控。**
-**一个只说"有事"却不说是什么的通知，等于让他自己去查。**
+## 自动更新与真实状态
 
----
+复用现有Windows任务，每天07:30、12:30、19:00采集。新电脑注册一次：
 
-## 三个值得说的地方
-
-### 1. 会话接管，不是逆向登录协议
-
-论坛登录有验证码、有反爬，硬啃协议的话，对方改一次版你就得重来。
-
-这里的做法是：**用真实浏览器登一次，把 `storage_state` 存下来，之后无头复用。**
-整个采集层因此完全不需要知道对方怎么加密、怎么发 token —— 验证码、JWT 兑换、
-签名这些事根本不出现。代价是首次要人工登录一次。
-
-同一个 `Session` 类被论坛和门户共用，`core/browser.py` 里也顺手打了去掉
-`navigator.webdriver` 之类的伪装补丁，因为有些站点会直接拦自动化浏览器。
-
-### 2. 增量 diff，而不是"抓最新的 N 条"
-
-`data/seen/<source>.json` 记录每个栏目下见过的 URL。第二次扫描只有 URL 不在快照里的
-才算新条目。定时任务一天跑三次，所以**推送也去重**（`data/pushed.json`）——
-同一条只在第一次出现时推，不然你一天会收到三遍一样的东西。
-
-有个细节值得单说：**冷启动时「抽不到日期」不等于「陈旧」。** 通知列表页本来就是
-倒序的最新几条，很多院系站点根本不在列表上给日期。如果冷启动逻辑把"没有日期"当成
-"太老"丢掉，最值钱的学院通知会一条都不剩 —— 这个坑踩过。
-
-### 3. 打分，而不是"全推给你"
-
-`rules.yaml` 是一张可调的词表，按组累加：`机会`（内推/招募/实习）、`科研进组`、
-`方向匹配`（具身/大模型/智能体）、`升学`（保研/推免）、`官方与截止`，还有负向的
-`exclude`（社招）和 `noise`（二手/灌水/代购）。
-
-低于 `archive_line`（默认 3 分）的直接丢掉，≥ `action_line`（默认 12 分）的才推手机。
-词表是配置不是代码 —— 换方向、换届数，改 YAML 就行。
-
----
-
-## 踩过的坑（都留了注释）
-
-**`Item.parse_day` 按格式串长度截断字符串 → 静默丢数据。**
-最早是这么写的：
-
-```python
-datetime.strptime(s[:len(fmt)], fmt)     # s = "2026-09-24" 被截成 "2026-09-"
+```powershell
+.\.venv\Scripts\python.exe -X utf8 run.py schedule install
 ```
 
-结果所有日期解析失败、全变成 `None`，冷启动逻辑据此把新帖判成"太旧"全部丢弃 ——
-**653 条抓进来、0 条推出去，而控制台一片成功。** 最难查的 bug 是不报错的那种。
-修法是不做任何截断，按多个格式逐个整体匹配，最后再用正则兜底。
+网页每30秒检查本地更新，有变化会提示刷新，不会打断正在阅读的内容。网页上方显示两源**最后实际成功采集时间**，区分无新增、采集失败、登录过期和任务未完成；刷新网页不等于重新采集。
 
-**推送失败曾经是"静默成功"。** 通道调用如果抛异常、被吞掉、进程照样 `exit 0`，
-计划任务就会记录 `Result=0`，唯一的症状是「人没收到东西」—— 那要等他自己察觉。
-现在每次推送都写一行 `data/push.log`，失败会让进程以非零码退出，`run.py doctor`
-一条命令就能回答"我今天为什么没收到推送"。
+电脑关机、休眠、用户未登录或校园网/VPN不可达时可能无法更新。Web服务不承担采集任务；不打开网页也可以定时扫描。不要把收录时间当发布时间，较早资料会明确标记；旧活动是否有效仍需看原文。
 
-**计划任务名不能含冒号。** `bupt-information-collector 07:30` 会被 `Register-ScheduledTask` 拒掉
-（`0x80070057 参数错误`，还不告诉你哪个参数错了）。另外注册完必须回查一遍，
-否则脚本会心安理得地打印"已注册"而实际一条都没装上。
+## 个性化与反馈
 
----
+当前网页只使用本地规则，不调用大模型。科研、实习、竞赛与活动等兴趣由本人在本地画像中编辑：
 
-## 目录结构
-
-```
-run.py                CLI 入口：scan / cold / push / read / login / doctor
-config.example.yaml   配置模板（config.yaml 自己填，已被 gitignore）
-rules.yaml            打分词表
-watchlist.json        监听哪些论坛版面
-
-core/
-  config.py           路径与配置加载
-  schema.py           Item 数据结构 —— 各源都产出它，下游不关心来源
-  browser.py          会话管理。核心是 storage_state 复用，不逆向登录协议
-  store.py            落盘：去重快照 + items.jsonl
-  rules.py            打分器
-  digest.py           渲染成 inbox markdown
-  push.py             推送：可插拔通道 + 去重 + 失败留痕
-
-sources/
-  byr.py              北邮人论坛
-  portal.py           教务 / 学院 / 学生处通知（通用列表页抽取）
-
-deploy/
-  Install.ps1         Windows 计划任务
-
-inbox/                每天生成的 markdown 摘要（gitignore）
-data/                 去重快照、items、推送记录（gitignore）
+```powershell
+.\.venv\Scripts\python.exe -X utf8 run.py profile path
+.\.venv\Scripts\python.exe -X utf8 run.py profile validate
 ```
 
----
+推荐面板给出推断与逐字原文证据；日期不足时明确未知，不猜报名资格。网页反馈会立即本地保存，采集任务忙时稍后同步到原反馈模块。收藏不等于重要反馈，“收到通知”也不等于“与我相关”。
 
-## 边界
+附件、图片型正文目前只提示打开原文，未实现OCR或附件全文提取。规则可能误判或漏掉机会，所以保留完整历史入口。[画像、实际评估与限制](docs/PERSONALIZATION.md)。
 
-- **只做「采 → 筛 → 推」这条链路。** 不做日程排期、不做目标管理 —— 那是另一件事。
-- 论坛源需要**首次人工登录**一次（会话快照会过期，过期时 `scan` 会提示重登）。
-- `sources.portal.lists` 里默认填的是北邮的几个列表页，换学校改 URL 即可；
-  抽取逻辑是通用的（找"链接 + 邻近日期"的行），改版时通常只需调 CSS selector。
-- 前端反自动化检测很强的站点（比如某些 SPA 教学系统）这套办法不保证能过，
-  那种情况的正确做法是直接走它的 HTTP 接口，而不是跟浏览器指纹死磕。
+## 本地数据与安全
 
-## License
+`.local/data/<账号作用域>/insight.sqlite3`保存采集历史；同目录的`reader.sqlite3`保存阅读、收藏与反馈待同步记录。网页以只读连接读取采集库，阅读状态使用独立事务，避免等候长时间网络扫描。反馈同步遵守原OS写入锁，不触发重推或改变delivery。
 
-MIT
+原库沿用DELETE日志、FULL同步、单写入锁与在线备份。阅读记录在服务启动时按日额外在线备份，保留7份。两种库均未额外加密，依赖本人Windows账户和受限目录，应保管好设备和备份。
+
+学校凭据、Cookie、Session、Token、真实画像、通知正文、数据库、日志、截图和备份都不提交Git。页面不加载远程字体、图片或脚本，正文按纯文本展示；本机Host检查、CSRF、SameSite Cookie和CSP限制跨站操作。云端私人门户/画像分析默认关闭，微信当前关闭。
+
+```powershell
+.\.venv\Scripts\python.exe -X utf8 run.py health
+.\.venv\Scripts\python.exe -X utf8 run.py backup create
+.\.venv\Scripts\python.exe -X utf8 run.py backup list
+```
+
+恢复默认先预览并核对指纹，不能静默覆盖真实库。备份恢复和可选模型配置见[Phase 2指南](docs/PHASE2.md)。阅读记录的独立备份位于`reader-backups/`，原库恢复不会自动回退收藏与已读状态。
+
+## 开发与GitHub同步
+
+仓库：[LiJunhao09100910/bupt-insight](https://github.com/LiJunhao09100910/bupt-insight)。`origin`指向本仓库；`upstream`保留原项目地址与MIT历史，不强推覆盖远程。
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -X utf8 -m pytest -q
+.\.venv\Scripts\python.exe -X utf8 -m tools.audit_git --staged
+```
+
+结构：`core/`为采集流水线与网页服务，`sources/`为两源适配器，`web/`为本地模板/CSS/JS，`deploy/`为Windows一键入口，`tests/`仅包含虚构测试数据，`docs/`为审计与验收。无Node构建链、前后端分离服务或向量数据库。
+
+新增改动走正常分支/提交/推送流程；提交前检查`git diff --cached`和隐私审计。GitHub登录使用Git Credential Manager正常浏览器流程，**不要把密码或PAT写进远程URL**。审计检查待提交树和全部可达历史中的私有路径、已保存凭据及常见密钥格式，但仍需人工检查正文与个人资料。
+
+[网页真实验收](docs/WEB-VALIDATION.md) · [源码与许可证审计](docs/AUDIT.md) · [原CLI完整指南](docs/CLI-GUIDE.md)
+
+## 许可证
+
+保留原项目[yantingweb/bupt-information-collector](https://github.com/yantingweb/bupt-information-collector)的MIT许可证及历史。where_to_study（GPL-3.0）和bupt-auth（MIT）仅作协议审计参考，未复制其实现。分发依赖需遵守各自许可证；本仓库不含私人校园数据库或认证状态。
