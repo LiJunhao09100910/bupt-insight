@@ -172,3 +172,35 @@ def test_newly_collected_item_is_visible_without_restarting_web(web):
     second=get(c,'/api/feed?view=all').json
     assert second['total']==first['total']+1 and second['version']!=first['version']
     assert any(i['title']==new.title and i['unread'] for i in second['items'])
+
+
+def test_daily_picks_are_short_read_items_leave_and_history_is_untouched(web,monkeypatch):
+    import copy
+    from datetime import date
+    from core.profile import Profile, Interest
+    cfg,notice,app,c,h=web
+    monkeypatch.setattr('core.curation.today',lambda:date(2026,10,17))
+    monkeypatch.setattr('core.web.load_profile',lambda _:Profile(interests=[Interest(name='科研与实习',terms=['科研','实习'])]))
+    db=database(cfg)
+    for i in range(12):
+        n=copy.deepcopy(notice);n.url=f'https://bbs.byr.cn/article/ParttimeJob/{i}'
+        n.source='byr';n.title=f'虚构实习招聘{i}';n.body='岗位要求：必须具备科研经验。'
+        n.published='2026-10-17';db.upsert(n)
+    n=copy.deepcopy(notice);n.url='http://my.bupt.edu.cn/view?id=staff'
+    n.title='虚构夫妻两地分居事务';n.body='科研人员申请条件。';db.upsert(n)
+    before=[tuple(r) for r in db.db.execute('SELECT * FROM notices ORDER BY id')]
+    deliveries=[tuple(r) for r in db.db.execute('SELECT * FROM deliveries')];db.close()
+    feed=get(c,'/api/feed?view=recommended').json
+    assert feed['total']==3 and feed['eligible_total']==12
+    picked=feed['items'][0]
+    r=c.post('/api/state',base_url='http://127.0.0.1:8765',headers=h,
+             json={'id':picked['id'],'hash':picked['hash'],'action':'read','value':True})
+    assert r.status_code==200
+    assert picked['id'] not in [i['id'] for i in get(c,'/api/feed?view=recommended').json['items']]
+    assert get(c,'/api/feed?view=all').json['total']==14
+    staff=get(c,'/api/feed?view=all&q=夫妻').json['items'][0]
+    assert staff['category']=='administration' and not any('方向及机会意图匹配' in r['text'] for r in staff['reasons'])
+    db=database(cfg)
+    assert [tuple(r) for r in db.db.execute('SELECT * FROM notices ORDER BY id')]==before
+    assert [tuple(r) for r in db.db.execute('SELECT * FROM deliveries')]==deliveries
+    db.close()

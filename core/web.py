@@ -17,7 +17,7 @@ from core.profile import load as load_profile
 from core.reader import Reader, get_rows, run_status, source, feedbacks
 
 CATEGORIES = {'research': '科研机会', 'competition': '竞赛', 'internship': '实习就业',
-              'event': '校园活动', 'mandatory_academic': '教务通知', 'general': '校园资讯', 'electronics': '电子科创'}
+              'event': '校园活动', 'mandatory_academic': '教务通知', 'general': '校园资讯', 'electronics': '电子科创', 'administration': '校务人事'}
 
 
 def safe_url(value):
@@ -105,21 +105,8 @@ def create_app(config_provider=load_config, port=8765):
             analysis = cache[key]
         state = states.get(row['id'], {}); feedback = events.get(key)
         category = analysis['category'] if analysis else 'general'
-        # An additional product topic; don't replace mandatory academic protection.
-        import re
-        academic_title=bool(re.search('考试|补考|学籍|退学|选课|必修|教务|毕业审核|毕业资格|学位审核|缴费',row['title']))
-        protected=bool(analysis and analysis['importance']=='high' and (row['source']=='portal' or academic_title))
-        if row['source']=='byr' and not academic_title:
-            # Job requirements often contain `必须`; that doesn't turn a job into
-            # an official academic notice. Original notification rules stay intact.
-            title=row['title']
-            if re.search('实习|招聘|内推|兼职|校招',title):category='internship'
-            elif re.search('竞赛|比赛|建模|挑战赛|电赛|美赛',title):category='competition'
-            elif re.search('科研|课题|征稿|论文|研究助理|\\bRA\\b',title,re.I) or row['origin']=='科研与论文':category='research'
-            elif re.search('讲座|报告会|活动|讲堂|社团',title):category='event'
-            else:category='general'
-        if category != 'mandatory_academic' and re.search('电子设计|电赛|科创|科创团队|硬件|嵌入式|FPGA|单片机|电路设计', row['title'] + '\n' + row['body'], re.I):
-            category = 'electronics'
+        from core.curation import assess
+        category, protected, relevance, reasons = assess(item, profile, analysis)
         hidden = state.get('hidden_hash') == row['hash'] or bool(feedback and feedback['label'] == 'irrelevant')
         if protected:
             hidden = False  # Safety-protected academic items remain visible.
@@ -133,10 +120,10 @@ def create_app(config_provider=load_config, port=8765):
                 'updated_at': row.get('content_seen',row['updated_at']) if row['revision']>1 else row['first_seen'], 'revision': row['revision'], 'url': safe_url(row['url']),
                 'summary': ((row['body'].split('\n\n',1)[1] if row['source']=='byr' and row['body'].startswith('发信人:') and '\n\n' in row['body'] else row['body']) or '正文暂不可用，请打开原文查看。')[:240],
                 'category': category, 'category_label': CATEGORIES[category],
-                'relevance': analysis['relevance'] if analysis else 'unknown',
+                'relevance': relevance,
                 'importance': 'high' if protected else 'normal', 'historical':historical,
                 'deadline': analysis['deadline'] if analysis else {'value': None, 'basis': 'unknown', 'evidence': ''},
-                'reasons': analysis['reasons'][:3] if analysis else [],
+                'reasons': reasons[:3],
                 'body_status': item.get('extra', {}).get('body_status', 'ok'),
                 'unread': state.get('read_hash') != row['hash'], 'favorite': bool(state.get('favorite')),
                 'hidden': hidden, 'feedback': feedback['label'] if feedback else None,
@@ -165,8 +152,8 @@ def create_app(config_provider=load_config, port=8765):
             if view not in ('hidden', 'all', 'favorites') and item['hidden']: continue
             if view == 'favorites' and not item['favorite']: continue
             if view == 'unread' and not item['unread']: continue
-            if view == 'recommended' and item['relevance'] not in ('high', 'medium') and item['importance'] != 'high' and item['feedback'] not in ('relevant','important'):
-                continue
+            from core.curation import eligible
+            if view == 'recommended' and not eligible(item): continue
             if category and item['category'] != category: continue
             if source_filter and item['source'] != source_filter: continue
             if query and query not in (item['title'] + '\n' + item['origin'] + '\n' + raw['body']).casefold(): continue
@@ -182,9 +169,16 @@ def create_app(config_provider=load_config, port=8765):
             page = max(1, int(request.args.get('page', 1)))
         except ValueError:
             abort(400)
-        size = 20; start = (page-1)*size
+        eligible_total = len(filtered)
+        if view == 'recommended':
+            # Cap ordinary recommendations, not compulsory academic matters.
+            from core.curation import shortlist
+            filtered = shortlist(filtered)
+            page = 1
+        size = max(8, len(filtered)) if view == 'recommended' else 20
+        start = (page-1)*size
         return jsonify(items=filtered[start:start+size], total=len(filtered), page=page, page_size=size,
-                       counts=counts, categories=CATEGORIES,
+                       counts=counts, categories=CATEGORIES, eligible_total=eligible_total,
                        version=hashlib.sha256(json.dumps([(i['id'],i['hash']) for i in items],sort_keys=True).encode()).hexdigest())
 
     @app.get('/api/detail')
