@@ -14,6 +14,8 @@ from core.config import resolve
 
 @pytest.fixture
 def web(cfg,notice,monkeypatch):
+    from datetime import date
+    monkeypatch.setattr('core.curation.today',lambda:date(2026,10,17))
     monkeypatch.setattr('core.security.get_secret',lambda _:None)
     cfg['push']['channels']={'desktop':{'enabled':True}}
     db=database(cfg);db.upsert(notice,['desktop']);db.close()
