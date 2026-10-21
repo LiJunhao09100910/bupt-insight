@@ -32,8 +32,10 @@ sources:
     requires_login: true
     private: false # 若关注私人版面，请设 true，禁止向第三方发送正文与链接
     watchlist: watchlist.json
-    boards: [Paper, ParttimeJob, MathModel, Innovation, ACM_ICPC, AcademicAffairs, SCS]
+    boards: [Paper, ML_DM, Robot, SICE, ParttimeJob, MathModel, Innovation, ACM_ICPC, AcademicAffairs, SCS]
     rows_per_board: 10
+    board_overrides:
+      Paper: {pages: 3, rows_per_page: 30}
 push:
   retries: 3
   channels:

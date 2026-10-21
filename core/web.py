@@ -105,8 +105,10 @@ def create_app(config_provider=load_config, port=8765):
             analysis = cache[key]
         state = states.get(row['id'], {}); feedback = events.get(key)
         category = analysis['category'] if analysis else 'general'
-        from core.curation import assess
+        from core.curation import assess, today
+        from core.research import opportunity
         category, protected, relevance, reasons = assess(item, profile, analysis)
+        research = opportunity(item, today())
         hidden = state.get('hidden_hash') == row['hash'] or bool(feedback and feedback['label'] == 'irrelevant')
         if protected:
             hidden = False  # Safety-protected academic items remain visible.
@@ -121,6 +123,7 @@ def create_app(config_provider=load_config, port=8765):
                 'summary': ((row['body'].split('\n\n',1)[1] if row['source']=='byr' and row['body'].startswith('发信人:') and '\n\n' in row['body'] else row['body']) or '正文暂不可用，请打开原文查看。')[:240],
                 'category': category, 'category_label': CATEGORIES[category],
                 'relevance': relevance,
+                'research': research,
                 'importance': 'high' if protected else 'normal', 'historical':historical,
                 'deadline': analysis['deadline'] if analysis else {'value': None, 'basis': 'unknown', 'evidence': ''},
                 'reasons': reasons[:3],
@@ -152,6 +155,13 @@ def create_app(config_provider=load_config, port=8765):
             if view not in ('hidden', 'all', 'favorites') and item['hidden']: continue
             if view == 'favorites' and not item['favorite']: continue
             if view == 'unread' and not item['unread']: continue
+            if view == 'research':
+                from core.curation import today
+                try:
+                    age = (today() - datetime.fromisoformat(item['published'][:10]).date()).days
+                except (ValueError, TypeError):
+                    continue
+                if not 0 <= age <= 90 or not item['research']['candidate']: continue
             from core.curation import eligible
             if view == 'recommended' and not eligible(item): continue
             if category and item['category'] != category: continue
@@ -161,7 +171,7 @@ def create_app(config_provider=load_config, port=8765):
         sort = request.args.get('sort', 'recommended' if view == 'recommended' else 'published')
         def rank(i):
             priority = 2 if i['importance'] == 'high' or i['feedback'] == 'important' else (1 if i['relevance'] == 'high' else 0)
-            return (int(not i['historical']), int(i['unread']), priority, i['published'], i['updated_at'])
+            return (int(not i['historical']), int(i['unread']), priority, i['research']['priority'], i['published'], i['updated_at'])
         if sort == 'recommended': filtered.sort(key=rank, reverse=True)
         elif sort == 'collected': filtered.sort(key=lambda i: i['updated_at'], reverse=True)
         else: filtered.sort(key=lambda i: (i['published'], i['updated_at']), reverse=True)

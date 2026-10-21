@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const state = {view:'recommended', category:'', q:'', source:'', sort:'recommended', page:1, version:null, item:null, request:0};
 const views = {recommended:['今天，少看一点','只留近期未读、与你相关的机会；普通精选最多 8 条，重要教务另列。','为你推荐'], latest:['新收录与更新','按本地收录时间浏览；发布时间另行标注，旧公告不会变成新公告。','最新收录'], unread:['还没读过的信息','看过的内容会留在历史中；正文有变化时会重新标为未读。','未读信息'], favorites:['留给以后的好机会','先收藏，等有时间再认真看看。','我的收藏'], all:['校园信息，完整保留','不依赖推荐判断，在这里发现算法可能漏掉的信息。','全部历史'], hidden:['暂时不感兴趣','内容没有被删除，随时可以恢复。重要教务事项仍受保护。','不感兴趣']};
 const icons = {research:'⌁',competition:'♧',internship:'▣',event:'✧',mandatory_academic:'▤',general:'◫',electronics:'⚡'};
+views.research=['本科科研招募','近90天的科研合作、导师和实验室招募，按发布时间排序；本科资格及署名以原文为准。','本科科研招募'];
 function el(tag,cls,text){const x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x;}
 function dateText(value,withTime=false){if(!value)return '暂无成功记录';const d=new Date(value);if(Number.isNaN(d.getTime()))return value;return d.toLocaleString('zh-CN',withTime?{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}:{year:'numeric',month:'2-digit',day:'2-digit'});}
 function toast(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>$('toast').hidden=true,3000);}
@@ -16,6 +17,9 @@ function renderCard(item){
  if(item.unread&&item.revision>1)meta.append(el('span','tag new','正文有更新'));
  if(item.historical)meta.append(el('span','tag','较早历史 · 留意有效期'));
  if(item.importance==='high')meta.append(el('span','tag priority','重要事项'));
+ if(item.research.candidate)meta.append(el('span','tag',item.research.undergraduate?'本科阶段明确':'本科资格待核实'));
+ if(item.research.ongoing)meta.append(el('span','tag','在研 / 补实验线索'));
+ if(item.research.authorship)meta.append(el('span','tag','有署名说明'));
  if(item.hidden)meta.append(el('span','tag','已标不感兴趣'));
  main.append(meta);const h=el('h2'),title=el('button','title-button');
  if(item.unread)title.append(el('span','unread-dot'));title.append(document.createTextNode(item.title));title.addEventListener('click',()=>openReader(item.id));h.append(title);main.append(h);
@@ -37,7 +41,7 @@ async function loadFeed(){
   const pages=Math.max(1,Math.ceil(data.total/data.page_size));$('pagination-label').textContent=`第 ${data.page} / ${pages} 页`;$('prev-page').disabled=data.page<=1;$('next-page').disabled=data.page>=pages;
  }catch(e){if(seq!==state.request)return;$('error-banner').textContent=e.message;$('error-banner').hidden=false;$('feed').replaceChildren(el('div','empty','暂时无法打开本地数据。采集和历史文件不会因此被清空。'));}
 }
-function switchView(view){state.view=view;state.page=1;state.sort=view==='recommended'?'recommended':view==='latest'?'collected':'published';$('sort').value=state.sort;const copy=views[view];$('view-title').replaceChildren(document.createTextNode(copy[0]),el('span','','✦'));$('view-subtitle').textContent=copy[1];$('breadcrumb-view').textContent=copy[2];$('list-context').textContent=view==='recommended'?'· 近30天未读精选，普通最多8条；重要教务另列':'· 按所选顺序浏览，历史完整保留';document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));loadFeed();}
+function switchView(view){state.view=view;state.page=1;state.sort=view==='recommended'?'recommended':view==='latest'?'collected':'published';$('sort').value=state.sort;const copy=views[view];$('view-title').replaceChildren(document.createTextNode(copy[0]),el('span','','✦'));$('view-subtitle').textContent=copy[1];$('breadcrumb-view').textContent=copy[2];$('list-context').textContent=view==='recommended'?'· 近30天未读精选，普通最多8条；重要教务另列':view==='research'?'· 近90天，含已读；未说明截止的仍需确认是否在招':'· 按所选顺序浏览，历史完整保留';document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));loadFeed();}
 async function openReader(id){
  try{const item=await api('/api/detail?'+new URLSearchParams({id}));state.item=item;$('reader-content').replaceChildren();const box=$('reader-content');
   box.append(el('span','tag',item.category_label),el('h2','detail-title',item.title),el('div','detail-meta',`${item.source==='portal'?'信息门户':'北邮人论坛'} · ${item.origin} · 发布于 ${item.published||'未知'}`));
@@ -50,6 +54,12 @@ async function openReader(id){
   if(item.deadline.value){insight.append(el('p','','原文明确的截止日期：'+item.deadline.value),el('div','evidence',item.deadline.evidence));}else insight.append(el('p','','截止时间：无法确认。没有完整年份或存在多处截止时，不推测日期。'));
   insight.append(el('p','','行动建议：核对适用对象、报名方式与当前有效期；这里不代表你已经满足资格。'));box.append(insight);
   if(item.body_status!=='ok')box.append(el('div','error-banner',item.body_status==='image_only'?'本通知正文为图片，文字尚未提取，请打开原文查看。':item.body_status==='attachment_only'?'本通知以附件提供正文，附件内容尚未提取。':'正文采集不完整，请以原文为准。'));
+  if(item.research.candidate){
+   box.append(el('div','body-label','科研合作线索'));
+   [['本科资格',item.research.undergraduate||'原文未明确本科生是否可参加。'],['在研 / 未投稿',item.research.ongoing||'原文未说明是否有已开展、尚未投稿的论文。'],['论文署名',item.research.authorship||'原文未说明二作、三作或其他署名安排，需按实际贡献与团队确认。'],['导师 / 课题组',item.research.mentor||'发布者身份与具体指导人需核实。']].forEach(([label,evidence])=>box.append(el('p','research-evidence',label+'：'+evidence)));
+   if(item.research.time_commitment)box.append(el('p','research-evidence','发帖时的投入要求：'+item.research.time_commitment+'（当前是否仍招需确认）'));
+   if(item.research.deadline)box.append(el('p','deadline','招募截止：'+item.research.deadline+(item.research.deadline_inferred?'（年份据发帖日期推定，请核对）':'')));
+  }
   box.append(el('div','body-label','收录正文 · 以原通知为准'),el('div','detail-body',item.body));
   item.attachments.forEach(a=>{if(a.url){const link=el('a','original-link',a.name+' ↗');link.href=a.url;link.target='_blank';link.rel='noopener noreferrer';box.append(link);}});
   box.append(el('div','detail-foot',`本地首次收录：${dateText(item.first_seen,true)} · 当前版本 ${item.revision}。发布时间与收录时间不同。`));
@@ -73,4 +83,4 @@ $('close-reader').onclick=closeReader;$('drawer-backdrop').onclick=closeReader;$
 $('help-button').onclick=()=>info('每天看五分钟，就够了',['首页只保留近30天未读且有明确推荐依据的机会，普通最多8条；已读、过期及较早历史不再占据首页。重要教务另列。收藏会保存到本机；关闭网页也不会丢失。','读过的信息留在完整历史中。正文发生变化会重新标为未读。不感兴趣的内容可以随时恢复，重要教务事项受保护。','采集由现有Windows计划任务独立执行。电脑关机、休眠、未登录或校园网/VPN断开时可能无法更新，请留意上方的最后成功时间。','学校原文按纯文本展示，不加载外部图片、脚本或字体。网页只在本机开放，不调用云端模型。关闭浏览器不会停止采集；用“关闭 BUPT Insight”快捷方式停止阅读服务。']);
 $('status-details').onclick=()=>info('信息从哪里来',latestStatus?['最近成功时间代表实际业务采集成功，不是网页刷新时间。无新增仍属于一次成功检查。',...Object.entries(latestStatus.sources).map(([k,s])=>`${k==='portal'?'信息门户':'北邮人论坛'}：${s.status}；最后成功 ${dateText(s.last_success,true)}；最近一轮读取 ${s.total} 条。`),latestStatus.feedback_pending?`还有 ${latestStatus.feedback_pending} 条反馈等待采集结束后同步，已经安全保存在本机。`:'反馈同步正常。']:['暂时无法取得运行状态，请稍后刷新。']);
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeReader();if(e.key==='/'&&!['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)){e.preventDefault();$('search').focus();}});
-$('today-label').textContent=new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'});loadFeed();checkStatus();setInterval(()=>checkStatus(true),30000);
+$('today-label').textContent=new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'});const initialView=new URLSearchParams(window.location.search).get('view');if(Object.hasOwn(views,initialView))switchView(initialView);else loadFeed();checkStatus();setInterval(()=>checkStatus(true),30000);

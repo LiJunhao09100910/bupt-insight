@@ -77,6 +77,69 @@ def test_byr_missing_login_explicit(cfg):
     assert exc.value.status == "login_expired"
 
 
+@pytest.mark.parametrize('second_page', ['new', 'repeated', 'failed'])
+def test_byr_pagination_deduplicates_and_keeps_partial_results(browser, cfg, monkeypatch, second_page):
+    from datetime import datetime, timezone, timedelta
+    from sources.byr import fetch
+    from playwright.sync_api import TimeoutError
+
+    cfg['sources']['byr']['board_overrides'] = {'Paper': {'pages': 2, 'rows_per_page': 30}}
+    context = browser.new_context()
+    calls = []
+    board = (FIXTURES / 'byr_board.html').read_text(encoding='utf-8').replace('2026-10-12 12:00', '12:34:56')
+
+    def route_handler(route):
+        url = route.request.url
+        calls.append(url)
+        html = board if '/board/' in url else '<table><tr><td class="a-content">虚构科研全文</td></tr></table>'
+        if '?p=2' in url:
+            if second_page == 'failed':
+                raise AssertionError('failed page should be intercepted before navigation')
+            if second_page == 'new':
+                html = board.replace('/222', '/333')
+        route.fulfill(status=200, body=html, content_type='text/html; charset=utf-8')
+
+    context.route('**/*', route_handler)
+
+    class Session:
+        def __init__(self, *args):
+            self.ctx = context
+            self.state_path = Path(cfg['paths']['session_dir']) / 'byr.bin'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def cookie(self, *args):
+            return 'fixture-user'
+
+        def new_page(self):
+            page = context.new_page()
+            original = page.goto
+
+            def goto(url, **kwargs):
+                if '?p=2' in url and second_page == 'failed':
+                    raise TimeoutError('fictional pagination timeout')
+                return original(url, **kwargs)
+
+            monkeypatch.setattr(page, 'goto', goto)
+            return page
+
+    monkeypatch.setattr('sources.byr.Session', Session)
+    monkeypatch.setattr('core.security.write_state', lambda *args: None)
+    result, _, errors = fetch(cfg, quiet=True)
+    assert len(result['Paper']) == (2 if second_page == 'new' else 1)
+    assert len({item.url for item in result['Paper']}) == len(result['Paper'])
+    day = datetime.now(timezone(timedelta(hours=8))).date().isoformat()
+    assert result['Paper'][0].published == day + ' 12:34:56'
+    assert all(item.body == '虚构科研全文' for item in result['Paper'])
+    assert bool(errors) == (second_page == 'failed')
+    assert sum('/article/' in url for url in calls) == len(result['Paper'])
+    context.close()
+
+
 def test_byr_legacy_configuration_prefers_encrypted_state(cfg):
     from core.browser import Session
     path = Path(cfg["paths"]["session_dir"])

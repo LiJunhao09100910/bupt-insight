@@ -165,6 +165,38 @@ def test_old_historical_priority_does_not_bury_current_opportunities(web):
     assert row['historical']
 
 
+def test_research_view_uses_publication_date_evidence_and_keeps_read_items(web):
+    import copy
+
+    cfg, notice, app, client, headers = web
+    db = database(cfg)
+    examples = [
+        ('new', '2026-10-16', '虚构科研合作招募', '面向本科生，在研项目需要补实验，根据贡献协商二作。'),
+        ('older', '2026-09-01', '虚构实验室科研招募', '欢迎本科生报名，导师指导科研。'),
+        ('graduate', '2026-10-16', '虚构科研实习招募', '仅限硕士研究生申请。'),
+        ('closed', '2026-10-16', '虚构科研合作招募', '欢迎本科生报名，现已招满。'),
+        ('expired', '2026-09-01', '虚构科研合作招募', '欢迎本科生报名，截止9月22日晚上。'),
+        ('old', '2026-01-01', '虚构科研合作招募', '欢迎本科生报名。'),
+        ('unknown', '', '虚构科研合作招募', '欢迎本科生报名。'),
+    ]
+    for identifier, published, title, body in examples:
+        item = copy.deepcopy(notice)
+        item.source = 'byr'
+        item.url = f'https://bbs.byr.cn/article/Paper/{identifier}'
+        item.title, item.body, item.published = title, body, published
+        db.upsert(item)
+    db.close()
+    feed = get(client, '/api/feed?view=research').json
+    assert feed['total'] == 2
+    assert [row['published'] for row in feed['items']] == ['2026-10-16', '2026-09-01']
+    first = feed['items'][0]
+    assert first['research']['undergraduate'] and first['research']['ongoing'] and first['research']['authorship']
+    assert client.post('/api/state', base_url='http://127.0.0.1:8765', headers=headers,
+                       json={'id': first['id'], 'hash': first['hash'], 'action': 'read', 'value': True}).status_code == 200
+    assert get(client, '/api/feed?view=research').json['total'] == 2
+    assert get(client, '/api/feed?view=all').json['total'] == 8
+
+
 def test_newly_collected_item_is_visible_without_restarting_web(web):
     import copy
     cfg,notice,app,c,h=web

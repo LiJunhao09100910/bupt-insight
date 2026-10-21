@@ -2,7 +2,7 @@
 import re
 from datetime import date, datetime, timezone, timedelta
 
-VERSION = 'reader-focus-v2'
+VERSION = 'reader-focus-v3'
 TOPICS = {
     'internship': r'实习|招聘|内推|兼职|校招',
     'competition': r'竞赛|比赛|建模|挑战赛|电赛|美赛',
@@ -31,6 +31,10 @@ def classify(item, profile):
     academic = bool(ACADEMIC.search(title) and (item.get('source') == 'portal' or re.search('通知|安排|核对|办理', title)))
     if academic:
         return 'mandatory_academic', True, '标题涉及学籍、考试或教务办理；请核对适用年级与办理要求。'
+    from core.research import opportunity
+    research = opportunity(item, today())
+    if research['candidate']:
+        return 'research', False, ''
     for category in ('competition', 'internship', 'electronics', 'research', 'event'):
         if re.search(TOPICS[category], title, re.I):
             return category, False, ''
@@ -51,7 +55,12 @@ def assess(item, profile, analysis):
         relevance = 'low'
         reasons = [{'text': exclusion, 'basis': 'inferred', 'evidence': title}]
     elif category in TOPICS:
+        from core.research import opportunity
+        research = opportunity(item, today())
         undergraduate = bool(re.search('本科|大[一二三四]', profile.stage + profile.grade))
+        if research['exclusion'] and (category == 'research' or undergraduate):
+            return category, False, 'low', [{'text': '科研招募存在资格限制、已截止或属于求助信息，暂不推荐。',
+                                            'basis': 'inferred', 'evidence': research['exclusion']}]
         graduate_only = re.search(r'博士后(?:招聘|招收)|(?:仅限|仅面向|必须为|须为)[^。\n]{0,12}(?:硕士研究生|博士研究生|在读博士)', title + '\n' + body[:1200])
         if undergraduate and graduate_only:
             return category, False, 'low', [{'text': '原文明确限定研究生或博士后，与当前本科阶段不符，不进入精选。',
@@ -69,6 +78,12 @@ def assess(item, profile, analysis):
             relevance = 'high'
             reasons = [{'text': f'你关注“{matched[0]}”；标题明确涉及该类机会。参与资格仍需核对原文。',
                         'basis': 'inferred', 'evidence': title}]
+            if research and research['candidate']:
+                detail = ('原文明确提到本科阶段；' if research['undergraduate'] else '本科资格未明确；')
+                detail += ('有在研或补实验线索；' if research['ongoing'] else '是否已有在研论文未明确；')
+                detail += ('有署名说明，需核对贡献和作者顺序。' if research['authorship'] else '二作、三作及署名安排未说明。')
+                reasons.insert(0, {'text': detail, 'basis': 'inferred',
+                                   'evidence': research['undergraduate'] or title})
         elif matched:
             relevance = 'medium'
             reasons = [{'text': '主题与你的兴趣接近，但尚未确认可参与的机会，不进入每日精选。',

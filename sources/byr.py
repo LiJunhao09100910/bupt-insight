@@ -5,6 +5,7 @@
 """
 import json
 import time
+from datetime import datetime, timezone, timedelta
 
 from core.browser import Session
 from core.config import resolve
@@ -81,7 +82,9 @@ def check_login(page, session):
 def fetch(cfg, only=None, quiet=False):
     """抓所有版面，返回 {board: [Item]}。不做过滤不打分的活。"""
     watch = load_watchlist(cfg, only)
-    rows_per = cfg["sources"]["byr"]["rows_per_board"]
+    source = cfg["sources"]["byr"]
+    rows_per = source["rows_per_board"]
+    overrides = source.get("board_overrides", {})
     timeout = cfg["net"]["timeout_ms"] + 10000
     tries = cfg["net"]["retries"]
     delay = cfg["net"]["delay_ms"] / 1000
@@ -98,16 +101,17 @@ def fetch(cfg, only=None, quiet=False):
 
         page = s.new_page()
 
-        def grab(board):
+        def grab(board, page_number):
             last = None
             for _ in range(tries):
                 try:
-                    page.goto(f"https://bbs.byr.cn/board/{board}",
+                    suffix = f"?p={page_number}" if page_number > 1 else ""
+                    page.goto(f"https://bbs.byr.cn/board/{board}{suffix}",
                               wait_until="domcontentloaded", timeout=timeout)
                     check_login(page, s)
                     page.wait_for_selector("table.board-list tr", timeout=20000)
                     page.wait_for_timeout(400)
-                    rows = page.evaluate(JS_ROWS)[:rows_per]
+                    rows = page.evaluate(JS_ROWS)
                     if not rows:
                         raise InsightError("structure_changed", "BYR 列表没有可解析帖子；请检查版面或选择器")
                     return rows
@@ -120,9 +124,31 @@ def fetch(cfg, only=None, quiet=False):
 
         for board, meta in watch.items():
             progress(cfg, "byr", "board_list", board=board)
-            time.sleep(delay)
             try:
-                rows = grab(board)
+                options = overrides.get(board, {})
+                pages = max(1, min(10, int(options.get("pages", 1))))
+                limit = max(1, min(100, int(options.get("rows_per_page", rows_per))))
+                rows = []
+                seen = set()
+                for page_number in range(1, pages + 1):
+                    time.sleep(delay)
+                    try:
+                        page_rows = grab(board, page_number)[:limit]
+                    except Exception as exc:
+                        if page_number == 1:
+                            raise
+                        status, message = safe_error(exc)
+                        errors.append(f"{status}: {board} 第{page_number}页读取失败：{message}")
+                        break
+                    fresh = [row for row in page_rows if row["url"] not in seen]
+                    if not fresh:
+                        break
+                    for row in fresh:
+                        seen.add(row["url"])
+                        if len(row["published"]) == 8 and row["published"][2:3] == ":":
+                            day = datetime.now(timezone(timedelta(hours=8))).date()
+                            row["published"] = f"{day.isoformat()} {row['published']}"
+                    rows.extend(fresh)
                 fetched[board] = [
                     Item(source="byr", channel=meta["name"], private=cfg["sources"]["byr"].get("private", False),
                          extra={"body_status": "pending"}, **r) for r in rows
