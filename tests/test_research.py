@@ -99,4 +99,4 @@ def test_research_intern_is_classified_as_research_before_general_internships():
     profile = Profile(stage='本科', interests=[Interest(name='本科科研', terms=['科研'])])
     category, protected, relevance, reasons = assess(item, profile, {})
     assert category == 'research' and not protected and relevance == 'high'
-    assert '署名安排未说明' in reasons[0]['text']
+    assert '具体招募条件与申请方式请查看详情' in reasons[0]['text']

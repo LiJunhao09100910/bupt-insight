@@ -79,9 +79,9 @@ def assess(item, profile, analysis):
             reasons = [{'text': f'你关注“{matched[0]}”；标题明确涉及该类机会。参与资格仍需核对原文。',
                         'basis': 'inferred', 'evidence': title}]
             if research and research['candidate']:
-                detail = ('原文明确提到本科阶段；' if research['undergraduate'] else '本科资格未明确；')
-                detail += ('有在研或补实验线索；' if research['ongoing'] else '是否已有在研论文未明确；')
-                detail += ('有署名说明，需核对贡献和作者顺序。' if research['authorship'] else '二作、三作及署名安排未说明。')
+                detail = ('原文提及本科生参与，具体招募条件与申请方式请查看详情。'
+                          if research['undergraduate'] else
+                          '科研招募信息，参与条件与申请方式请查看原文。')
                 reasons.insert(0, {'text': detail, 'basis': 'inferred',
                                    'evidence': research['undergraduate'] or title})
         elif matched:
