@@ -234,7 +234,11 @@ def create_app(config=None, port: int | None = None):
         items = [decorate(r, profile, states, events) for r in rows]
         from core.curation import blocked
 
-        pairs = [(item, raw) for item, raw in zip(items, rows) if not blocked(item, cfg)]
+        pairs = [
+            (item, raw)
+            for item, raw in zip(items, rows)
+            if item["importance"] == "high" or not blocked(item, cfg)
+        ]
         items = [item for item, _ in pairs]
         rows = [raw for _, raw in pairs]
         counts = {

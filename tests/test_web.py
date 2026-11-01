@@ -67,6 +67,25 @@ def test_blocked_title_is_excluded(cfg):
     assert payload["counts"]["all"] == 0
 
 
+def test_protected_academic_notice_is_not_blocked(cfg):
+    from core.schema import Item
+
+    item = Item(
+        source="portal",
+        channel="教务处",
+        title="关于2026年秋季学期选课名单公示的通知",
+        url="http://my.bupt.edu.cn/view?id=9003",
+        published="2026-10-30 09:00",
+        body="选课名单公示，请核对。",
+        private=True,
+        extra={},
+    )
+    seed(cfg, item)
+    payload = client(cfg).get("/api/feed?view=all", headers={"Host": HOST}).get_json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["category"] == "mandatory_academic"
+
+
 def test_block_titles_can_be_disabled(cfg):
     from core.schema import Item
 
