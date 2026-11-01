@@ -12,7 +12,7 @@
 #           browser = Playwright 打开 Edge 人工登录
 login:
   mode: http
-  timeout: 25
+  timeout: 25             # 按需：统一认证超时秒数
   username: ""            # 可留空，改用 --save-credentials 加密保存
   password: ""
   credentials_file: secrets/portal.enc
@@ -22,7 +22,7 @@ login:
 browser: edge
 # browser_path: "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
 
-base: http://my.bupt.edu.cn
+base: http://my.bupt.edu.cn   # 必填：门户地址，一般不用改
 login_timeout: 600        # browser 模式等待人工登录的秒数
 identity_selector: ".topinner"   # 登录后才会出现的身份区域，用于确认已登录
 
@@ -34,7 +34,7 @@ lists:
     date_selector: "span.time"
     source_selector: "span.author"
     body_selector: "#vsb_content .v_news_content"
-    pages: 10
+    pages: 10              # 按需：抓取页数，每页 20 条
 
   - name: "校内新闻"
     url: "http://my.bupt.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=1221"
@@ -43,7 +43,7 @@ lists:
     date_selector: "span.time"
     source_selector: "span.author"
     body_selector: "#vsb_content .v_news_content"
-    pages: 5
+    pages: 5               # 按需：抓取页数，每页 20 条
 
   - name: "校内文件"
     url: "http://my.bupt.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=2001"
@@ -52,7 +52,7 @@ lists:
     date_selector: "span.time"
     source_selector: "span.author"
     body_selector: "#vsb_content .v_news_content"
-    pages: 2
+    pages: 2               # 按需：抓取页数，每页 20 条
 
   # 需要更多栏目时照此追加；name 会作为通知的“发布部门/栏目”。
   # - name: "科研院"
@@ -66,11 +66,11 @@ lists:
 
 # tools/portal_sync.py 用这一段完成上传与服务器导入。
 server:
-  host: "your-server"            # 服务器地址或域名
-  user: "ubuntu"
-  port: 22
-  app_dir: /opt/bupt-insight/app
-  inbox: /var/lib/bupt-insight/portal-inbox
-  python: /opt/bupt-insight/venv/bin/python
-  service_user: bupt
+  host: "your-server"            # 必填：服务器地址或域名
+  user: "ubuntu"                 # 按需：SSH 用户
+  port: 22                       # 按需：SSH 端口
+  app_dir: /opt/bupt-insight/app  # 必填：服务器仓库路径
+  inbox: /var/lib/bupt-insight/portal-inbox  # 必填：服务器收件目录
+  python: /opt/bupt-insight/venv/bin/python  # 按需：服务器 venv 的 python
+  service_user: bupt             # 按需：导入时切换到的服务用户
   import_args: []                # 例如 ["--push"]

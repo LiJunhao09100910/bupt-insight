@@ -36,6 +36,21 @@ python -X utf8 run.py web              # http://127.0.0.1:8000
 `login byr` 需要图形界面。无头服务器的登录方式、账号保存与登录自检的完整步骤见
 [配置账号与登录](#配置账号与登录)。
 
+## 配置文件
+
+克隆后**不能直接** `run.py web`：先运行 `run.py init` 生成 `config.yaml`，按下表修改后再保存凭据、登录和采集。
+
+| 文件 | 是否必需 | 模板 | 需要修改的内容 |
+|---|---|---|---|
+| `config.yaml` | 必需 | `config.example.yaml`（`run.py init` 自动复制） | `site.base_url`、`site.allowed_hosts`、`paths.*`；按需 `sources.byr.boards`、`push`、`ai` |
+| `portal_client.yaml` | 可选（信息门户） | `portal_client.example.yaml` | `server.*`；列表已内置，凭据用 `--save-credentials` |
+| `watchlist.json` | 可选 | 仓库自带默认值 | 关注的版面与推送门槛 |
+| `profile.yaml` | 可选（个性化） | `examples/profile.example.yaml` / `run.py profile init` | 年级、方向、屏蔽词 |
+| `deploy/` 下的 nginx/systemd | 仅部署 | `deploy/*.example` | 域名、路径、运行用户 |
+
+`config.yaml` 与 `portal_client.yaml` 都在 `.gitignore` 中，不会被提交；凭据单独加密保存在
+`secrets_dir`。
+
 ## 配置账号与登录
 
 部署后需要两步：**保存账号**（加密落盘）和**登录一次**（保存会话）。两步都必须由运行
