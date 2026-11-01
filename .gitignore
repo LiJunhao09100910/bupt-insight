@@ -28,3 +28,9 @@ htmlcov/
 
 # Local evaluation evidence may contain private notices.
 docs/*.json
+
+# Manual portal bundles and the client config contain private notices/paths.
+portal_client.yaml
+portal-*.json
+portal-*.json.gz
+portal-out/

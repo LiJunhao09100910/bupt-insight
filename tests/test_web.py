@@ -116,7 +116,7 @@ def test_healthz_has_no_side_effects(cfg, notice):
 def test_status_reports_byr(cfg, notice):
     seed(cfg, notice)
     payload = client(cfg).get("/api/status", headers={"Host": HOST}).get_json()
-    assert list(payload["sources"]) == ["byr"]
+    assert list(payload["sources"]) == ["byr", "portal"]
     assert payload["privacy"] == "local"
 
 from datetime import datetime, timedelta, timezone

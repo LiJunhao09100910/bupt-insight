@@ -89,6 +89,10 @@ class Database:
           id INTEGER PRIMARY KEY, notice_id TEXT NOT NULL, content_hash TEXT NOT NULL,
           profile_hash TEXT NOT NULL, label TEXT NOT NULL, note TEXT NOT NULL,
           explanation_quality INTEGER, created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS portal_bundles (
+          bundle_id TEXT PRIMARY KEY, imported_at TEXT NOT NULL, filename TEXT NOT NULL,
+          items INTEGER NOT NULL, new_count INTEGER NOT NULL, changed_count INTEGER NOT NULL,
+          unchanged_count INTEGER NOT NULL, errors TEXT NOT NULL);
         """
         )
         self._migrate()
@@ -225,6 +229,28 @@ class Database:
                   SELECT notice_id,hash,channel,status FROM deliveries WHERE id=?""",
                     (delivery_id,),
                 )
+
+    def bundle_imported(self, bundle_id: str) -> bool:
+        return (
+            self.db.execute("SELECT 1 FROM portal_bundles WHERE bundle_id=?", (bundle_id,)).fetchone()
+            is not None
+        )
+
+    def record_bundle(self, bundle_id, filename, items, counts, errors=()) -> None:
+        with self.db:
+            self.db.execute(
+                "INSERT OR REPLACE INTO portal_bundles VALUES(?,?,?,?,?,?,?,?)",
+                (
+                    bundle_id,
+                    now(),
+                    str(filename)[-500:],
+                    int(items),
+                    int(counts.get("new", 0)),
+                    int(counts.get("changed", 0)),
+                    int(counts.get("unchanged", 0)),
+                    json.dumps(list(errors), ensure_ascii=False),
+                ),
+            )
 
     def status(self) -> dict:
         return {

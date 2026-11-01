@@ -186,7 +186,7 @@ def get_rows(path):
                 """SELECT n.*,
           COALESCE((SELECT MIN(created_at) FROM deliveries d WHERE d.notice_id=n.id AND d.revision=n.revision),
                    n.updated_at) AS content_seen
-          FROM notices n WHERE source='byr'"""
+          FROM notices n WHERE source IN ('byr','portal')"""
             )
         ]
 
@@ -202,18 +202,18 @@ def feedbacks(path, profile_hash):
 def run_status(cfg, path):
     result = {}
     with source(path) as db:
-        name = "byr"
-        latest = db.execute(
-            "SELECT status,started_at,finished_at,total FROM sync_runs WHERE source=? ORDER BY id DESC LIMIT 1", (name,)
-        ).fetchone()
-        good = db.execute(
-            "SELECT finished_at,total FROM sync_runs WHERE source=? AND status IN ('ok','no_new') ORDER BY id DESC LIMIT 1",
-            (name,),
-        ).fetchone()
-        state = latest["status"] if latest else "never"
-        if state == "running" and datetime.now(timezone.utc) - datetime.fromisoformat(latest["started_at"]) > timedelta(hours=1):
-            state = "stuck"
-        if good and datetime.now(timezone.utc) - datetime.fromisoformat(good["finished_at"]) > timedelta(hours=24) and state in ("ok", "no_new"):
-            state = "stale"
-        result[name] = {"status": state, "last_success": good["finished_at"] if good else None, "total": latest["total"] if latest else 0}
+        for name in ("byr", "portal"):
+            latest = db.execute(
+                "SELECT status,started_at,finished_at,total FROM sync_runs WHERE source=? ORDER BY id DESC LIMIT 1", (name,)
+            ).fetchone()
+            good = db.execute(
+                "SELECT finished_at,total FROM sync_runs WHERE source=? AND status IN ('ok','no_new') ORDER BY id DESC LIMIT 1",
+                (name,),
+            ).fetchone()
+            state = latest["status"] if latest else "never"
+            if state == "running" and datetime.now(timezone.utc) - datetime.fromisoformat(latest["started_at"]) > timedelta(hours=1):
+                state = "stuck"
+            if good and datetime.now(timezone.utc) - datetime.fromisoformat(good["finished_at"]) > timedelta(hours=24) and state in ("ok", "no_new"):
+                state = "stale"
+            result[name] = {"status": state, "last_success": good["finished_at"] if good else None, "total": latest["total"] if latest else 0}
     return result

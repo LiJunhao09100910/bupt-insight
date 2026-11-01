@@ -1,13 +1,14 @@
-# BUPT Insight · BYR
+# BUPT Insight
 
-一个只保留 [北邮人论坛](https://bbs.byr.cn) 信息源的本地阅读站：采集关注的版面与原帖正文，按内容和版本去重，用可解释的本地规则做策展，再通过网页或可选推送渠道阅读。
+一个把 [北邮人论坛](https://bbs.byr.cn) 与信息门户（可选、手动导入）集中到本地阅读的工作台：按内容和版本去重，用可解释的本地规则做策展，再通过网页或可选推送渠道阅读。
 
 本项目可在 **Linux 服务器** 上长期运行，也可在 Windows/macOS 本地开发。与原项目的差异见 [docs/UPSTREAM.md](docs/UPSTREAM.md)。
 
+- 信息源：BYR 论坛自动采集；信息门户由校网内的电脑手动导出后导入，服务器不接触门户账号
 - 只读网页：为你推荐、最新收录（近 90 天，可按主题筛选）、科研机会、竞赛、实习就业、电子科创、校园活动、教务通知、未读、收藏、全部历史、不感兴趣
 - 采集：Playwright 无头浏览器，按版面读取列表与首帖正文，跳过置顶，分页去重
 - 存储：SQLite（WAL），按内容哈希维护版本与每渠道 outbox
-- 凭据：BYR 账号密码与会话快照均以 AES-256-GCM 加密保存，密钥与密文分离
+- 凭据：BYR 账号密码与会话快照、门户导出凭据均以 AES-256-GCM 加密保存，密钥与密文分离
 - 推送：通用 Webhook / ntfy / PushPlus / Server酱（可选，默认关闭）
 - 零前端构建链：Flask + 原生 HTML/CSS/JS
 
@@ -135,11 +136,49 @@ sudo systemctl enable --now bupt-insight-web.service
 | `scan` 返回 `login_expired` | 会话过期 | 重新执行 `login byr`，已采集数据不受影响 |
 | Chromium 报 `Executable doesn't exist` | 未安装浏览器 | `playwright install chromium`，或设置 `net.executable_path` |
 
+## 信息门户（手动导入）
+
+信息门户 `my.bupt.edu.cn` 只在校园内网可达，服务器无法直接采集，因此门户内容采用
+「校网机器导出 → 上传 → 服务器导入」：
+
+```
+校网电脑：登录 → 抓列表/正文 → 生成 bundle
+        │ scp
+        ▼
+服务器：run.py portal import → 与 BYR 同库、同分类、同展示
+```
+
+- 服务器**从不保存门户账号密码**，也不访问门户；无法稳定连校园网的机器也能用。
+- 门户条目以 `private=True` 入库：网页可看全文，推送只发标题和来源。
+- 导入幂等：同一 bundle 重复上传返回 `already_imported`；同 URL 正文变化才产生新版本。
+- 门户条目和 BYR 一样进入阅读页，来源筛选显示为「信息门户」。
+
+本机导出（在能访问门户的电脑上）：
+
+```bash
+cp portal_client.example.yaml portal_client.yaml   # 校准列表 URL/选择器与 server
+python -X utf8 tools/portal_sync.py --save-credentials   # 一次，密码加密保存
+python -X utf8 tools/portal_sync.py                      # 导出 → 上传 → 服务器导入
+```
+
+服务器手动导入（等价流程）：
+
+```bash
+scp portal-*.json <server>:/var/lib/bupt-insight/portal-inbox/
+python -X utf8 run.py portal import /var/lib/bupt-insight/portal-inbox/portal-*.json
+```
+
+`portal import` 支持 `--push`（导入后立即分析/推送）、`--force`（忽略 bundle 去重）、
+`--keep`（保留上传文件）。Bundle 格式、字段、初筛与安全边界见
+[docs/PORTAL-FORWARD.md](docs/PORTAL-FORWARD.md)。
+
 
 ## 凭据与加密
 
 - 账号密码保存在 `paths.secrets_dir`（默认 `.local/secrets`）下的 `byr.enc`；
   会话快照在同一目录的 `byr-state.enc`。
+- 门户导出凭据只保存在导出端（默认 `secrets/portal.enc` + `secrets/portal.key`），
+  服务器上没有门户账号。
 - 两者都是 **AES-256-GCM** 密文，密钥来自独立的 `master.key`，或环境变量
   `BUPT_INSIGHT_MASTER_KEY`（32 字节 base64/hex）。
 - 密文与密钥分离、按用途绑定 AAD；权限不符（非 0600/0700）会拒绝读取。
@@ -157,6 +196,7 @@ python -X utf8 run.py backup create
 python -X utf8 run.py profile path        # 个人画像位置
 python -X utf8 run.py recommend --limit 10
 python -X utf8 run.py credentials status
+python -X utf8 run.py portal import /var/lib/bupt-insight/portal-inbox/portal-*.json
 ```
 
 完整命令以 `run.py --help` 为准。
@@ -179,6 +219,7 @@ gunicorn --bind 127.0.0.1:8000 --workers 1 --threads 8 --worker-class gthread ws
   backups/               在线快照
   reader-backups/        阅读库按日快照（保留 7 份）
   evaluations/           本地评估批次
+  portal-inbox/          门户 bundle 的收件与已导入归档
 <secrets_dir>/
   master.key             主密钥（0600，可用环境变量替代）
   byr.enc                加密账号

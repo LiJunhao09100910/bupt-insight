@@ -94,6 +94,14 @@ def parser():
 
     logout = sub.add_parser("logout", help="清除本地会话，可选清除加密凭据")
     logout.add_argument("--clear-credentials", action="store_true")
+
+    portal = sub.add_parser("portal", help="手动导入门户导出的 bundle")
+    portal.add_argument("action", choices=["import"])
+    portal.add_argument("file")
+    portal.add_argument("--push", action="store_true", help="导入后运行分析与推送")
+    portal.add_argument("--force", action="store_true", help="忽略 bundle_id 去重，重新导入")
+    portal.add_argument("--keep", action="store_true", help="导入后保留原文件")
+
     sub.add_parser("version", help="打印版本")
     return ap
 
@@ -201,6 +209,37 @@ def main(argv=None):
                 value = profile.load(cfg)
                 output({"status": "valid", "fingerprint": value.fingerprint(), "empty": value == profile.Profile()})
             return 0
+
+        # Manual portal ingestion: the operator exports a bundle on a campus
+        # machine and uploads it; the server only validates and imports.
+        if args.cmd == "portal":
+            import shutil as _shutil
+            from pathlib import Path as _Path
+
+            from core.locking import single_run
+            from core.notifications import dispatch, enabled as enabled_channels
+            from core.portal_import import import_bundle
+
+            source = _Path(args.file).expanduser()
+            if not source.exists():
+                raise InsightError("bundle_missing", f"找不到 bundle：{source}")
+            with single_run(data_dir(cfg) / "run.lock"):
+                db = database(cfg)
+                try:
+                    report = import_bundle(cfg, db, source, force=args.force, channels=enabled_channels(cfg))
+                    if args.push and report["status"] != "already_imported":
+                        from core.analysis import run_pending
+
+                        report["analysis"] = run_pending(cfg, db)
+                        report["deliveries"] = dispatch(cfg, db)
+                finally:
+                    db.close()
+            if not args.keep and report["status"] != "already_imported":
+                destination = data_dir(cfg) / "portal-inbox" / "imported"
+                destination.mkdir(parents=True, exist_ok=True)
+                _shutil.move(str(source), destination / source.name)
+            output(report)
+            return 0 if report["status"] != "failed" else 1
 
         # `sync` owns the writer lock itself; taking it here as well would fail
         # with already_running because flock conflicts even inside one process.
