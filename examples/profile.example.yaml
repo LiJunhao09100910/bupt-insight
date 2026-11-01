@@ -1,22 +1,22 @@
 # 全部为虚构资料。禁止将本文件直接作为真实个人画像。
-is_example: true
-grade: 大三
-major: 虚构计算机专业
-stage: 本科
-research_interests: [机器学习, 网络安全]
-skills: [Python, Linux]
-projects: [虚构课程推荐系统]
-competitions: [虚构程序设计校赛]
-goals: [科研实践, 实习]
-opportunities: [科研, 实习, 竞赛]
-uninterested: [二手交易]
-interests:
-  - name: 虚构科研参与方向
-    terms: [科研, 实验室, research assistant]
-    intents: [招募, 招新, 申请, 开放]
-    avoid: []
+is_example: true            # 必填：保持 true，避免被当成真实画像
+grade: 大三                 # 必填：年级，例如 大三 / 研一
+major: 虚构计算机专业       # 必填：专业
+stage: 本科                 # 必填：本科 / 硕士 / 博士
+research_interests: [机器学习, 网络安全]   # 按需：关注的科研方向
+skills: [Python, Linux]     # 按需：技能
+projects: [虚构课程推荐系统] # 按需：项目经历
+competitions: [虚构程序设计校赛]  # 按需：竞赛经历
+goals: [科研实践, 实习]     # 按需：阶段目标
+opportunities: [科研, 实习, 竞赛]  # 按需：希望看到的机会类型
+uninterested: [二手交易]    # 按需：屏蔽词 / 不感兴趣主题
+interests:                  # 按需：结构化兴趣，可多条
+  - name: 虚构科研参与方向  # 必填：兴趣名称
+    terms: [科研, 实验室, research assistant]  # 按需：同义词
+    intents: [招募, 招新, 申请, 开放]           # 按需：机会意图
+    avoid: []               # 按需：冲突词
     description: "仅为示例；应填写本人具体希望参与什么，不能当作资格证明。"
 preferences:
-  ordinary: digest
-  relevant: digest
-  archive_uninterested: true
+  ordinary: digest          # 按需：普通信息的推送方式
+  relevant: digest          # 按需：相关信息的推送方式
+  archive_uninterested: true  # 按需：不感兴趣的内容是否归档

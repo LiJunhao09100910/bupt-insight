@@ -1,65 +1,95 @@
-# 密码和推送密钥通过 credentials 命令写入 Windows Credential Manager。
+# BUPT Insight 配置模板（BYR 论坛 + 可选信息门户手动导入）
+#
+# 运行 `python -X utf8 run.py init` 会自动复制为 config.yaml；也可以手动复制后修改。
+# 密码不写在这里：运行 `run.py credentials save` 会把账号密码加密保存到
+# paths.secrets_dir 下的密文文件。
+
 owner:
-  tz: Asia/Shanghai
+  tz: Asia/Shanghai            # 必填：影响“今天/近90天”等判断，服务器请保持一致
+
+site:
+  title: BUPT Insight          # 按需：网页标题
+  # 必填：对外访问地址，用于生成通知里的链接；HTTPS 时 cookie 自动带 Secure。
+  base_url: https://insight.example.com
+  # 必填：实际域名，用于 Host 校验（防 DNS rebinding）。
+  # 127.0.0.1/localhost 始终允许；本地调试可先把本项留空。
+  allowed_hosts:
+    - insight.example.com
+  # 按需：由 base_url 推断；明文 HTTP 本地调试时可显式设为 false
+  cookie_secure: null
+
+server:
+  host: 127.0.0.1             # 必填：只监听本机，由 nginx 反代；不要改成 0.0.0.0
+  port: 8000                  # 按需：gunicorn 监听端口，需与 nginx/系统服务一致
+
+filters:
+  # 按需：“不包含”式屏蔽，标题包含任一词的条目不进入阅读页（重要教务事项除外）。
+  # 默认过滤“科研资金公示”等大量噪声；设为 [] 可关闭。
+  block_titles: ["公示"]
+
 net:
-  browser: edge
-  executable_path: ""
-  timeout_ms: 30000
-  retries: 2
-  delay_ms: 2500
+  browser: chrome             # 必填：chrome / chromium / edge
+  executable_path: ""         # 按需：浏览器绝对路径，例如 /opt/google/chrome/chrome
+  timeout_ms: 30000           # 按需：单页超时（毫秒）
+  retries: 2                  # 按需：失败重试次数
+  delay_ms: 2500              # 按需：请求间隔（毫秒），别调太低
+  args: []                    # 按需：额外 Chromium 参数，例如 ["--disable-dev-shm-usage"]
+
 paths:
-  session_dir: .local/sessions
-  data_dir: .local/data
-  inbox_dir: .local/inbox
+  # 生产环境必改：放到仓库外的绝对路径，例如 /var/lib/bupt-insight
+  data_dir: .local/data       # 必填：数据库、备份与门户导入归档
+  session_dir: .local/sessions  # 必填：浏览器会话临时目录
+  inbox_dir: .local/inbox     # 必填：推送/导入的中间文件
+  secrets_dir: .local/secrets # 必填：0700；与 config.yaml 分离，且不在版本控制内
+
 sources:
-  portal:
-    enabled: true
-    base: http://my.bupt.edu.cn
-    auth_mode: browser   # browser / http / auto；实际账号认证均待验证
-    session: portal_state.bin
-    manual_wait_seconds: 180
-    identity_selector: ""   # 登录后账号身份区域，必须校准
-    identity_expected_text: "" # 可选的账号标记；不要填写密码
-    business_selector: ""   # 仅登录后可见的业务内容区域，必须校准
-    frame_selector: ""      # 如果通知在 iframe 中，填写其选择器
-    rows_per_list: 20
-    # 尚未获取账号下的真实列表，禁止填写虚构接口冒充可用适配器。
-    lists: []
   byr:
-    enabled: true
-    base: https://bbs.byr.cn
-    session: byr_state.bin
-    requires_login: true
-    private: false # 若关注私人版面，请设 true，禁止向第三方发送正文与链接
-    watchlist: watchlist.json
+    enabled: true             # 按需：false 时只展示手动导入的门户内容
+    base: https://bbs.byr.cn  # 必填：论坛地址
+    requires_login: true      # 必填：BYR 需要登录
+    private: false            # 按需：若关注私人版面设 true，禁止把正文发往第三方
+    watchlist: watchlist.json # 必填：版面名单文件
+    # 按需：实际采集的版面；需同时存在于 watchlist.json
     boards: [Paper, ML_DM, Robot, SICE, ParttimeJob, MathModel, Innovation, ACM_ICPC, AcademicAffairs, SCS]
-    rows_per_board: 10
-    board_overrides:
+    rows_per_board: 10        # 按需：每个版面读取的行数
+    board_overrides:          # 按需：单版面覆盖，例如更多页
       Paper: {pages: 3, rows_per_page: 30}
+    # 按需：留空则使用 paths.secrets_dir 下的默认文件名
+    credentials_file: ""      # 默认 <secrets_dir>/byr.enc
+    session_file: ""          # 默认 <secrets_dir>/byr-state.enc
+    master_key_file: ""       # 默认 <secrets_dir>/master.key（也可用环境变量注入）
+
 push:
-  retries: 3
-  channels:
+  retries: 3                  # 按需：推送重试次数
+  channels:                   # 按需：默认全部关闭；至少启用一个才会推送
+    # 通用 Webhook：JSON POST {"title","body","url"}
+    webhook: {enabled: false, url: ""}
+    # ntfy：手机推送，可自建；topic 相当于频道口令
+    ntfy: {enabled: false, server: https://ntfy.sh, topic: "", token: ""}
+    # 微信通道（可选）
     pushplus: {enabled: false}
     serverchan: {enabled: false}
-    desktop: {enabled: true}
+
 backup:
-  enabled: true
-  interval_hours: 24
-  keep: 7
+  enabled: true               # 按需：自动备份
+  interval_hours: 24          # 按需：备份间隔
+  keep: 7                     # 按需：保留份数
+
 health:
-  stale_hours: 24
+  stale_hours: 24             # 按需：超过多少小时未成功视为 stale
+
 ai:
-  mode: "off" # off=不调用模型；mock=模拟规则；api=真实OpenAI兼容API
-  base_url: "" # 例如本人部署的 http://127.0.0.1:8000/v1；外部服务必须HTTPS
-  model: "" # 可由 LLM_MODEL 覆盖；base_url可由 LLM_BASE_URL覆盖
-  response_format: json_schema # 不支持schema的服务可显式改json_object，仍严格本地校验
-  timeout_seconds: 8
-  retries: 1
-  budget_seconds: 12 # 每轮分析总时间上限，超时保留基础提醒
-  max_per_run: 20 # API模式仍受总时间预算限制，剩余通知使用基础提醒
-  max_input_chars: 6000
-  allow_private_cloud: false # 单独授权发送门户标题、截断正文、来源和发布日期
-  allow_profile_cloud: false # 独立授权发送结构化画像；默认仅本地匹配
-  # profile_path为空时按当前账号作用域存储。禁止指向示例资料。
+  mode: "off"                 # 按需：off=不调用模型；mock=模拟；api=OpenAI 兼容接口
+  base_url: ""                # mode=api 时必填：接口地址
+  model: ""                   # mode=api 时必填：模型名
+  response_format: json_schema  # 按需：结构化输出格式
+  timeout_seconds: 8          # 按需：单次调用超时
+  retries: 1                  # 按需：失败重试次数
+  budget_seconds: 12          # 按需：单轮总预算
+  max_per_run: 20             # 按需：每轮最多分析条数
+  max_input_chars: 6000       # 按需：单条正文截断长度
+  allow_private_cloud: false  # 按需：是否允许私人内容发往外部模型
+  allow_profile_cloud: false  # 按需：是否允许个人画像发往外部模型
+
 smart:
-  enabled: false # 开启后AI关闭时使用本地规则；重要事项即时，普通按本轮汇总
+  enabled: false              # 按需：开启后用本地规则/AI 决定即时提醒或汇总
