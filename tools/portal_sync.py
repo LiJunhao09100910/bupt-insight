@@ -1,4 +1,4 @@
-"""One command: log in to the portal, export a bundle, upload and import it.
+﻿"""One command: log in to the portal, export a bundle, upload and import it.
 
 Run on a machine that can reach the campus portal:
 
@@ -204,7 +204,7 @@ def main(argv=None) -> int:
     parser.add_argument("--config", default=None, help="默认 portal_client.yaml（仓库根目录）")
     parser.add_argument("--bundle", default=None, help="跳过导出，直接上传已有 bundle")
     parser.add_argument("--days", type=int, default=90)
-    parser.add_argument("--max", type=int, default=300)
+    parser.add_argument("--max", type=int, default=400)
     parser.add_argument("--out-dir", default=None, help="默认 portal-out/（仓库根目录）")
     parser.add_argument("--no-upload", action="store_true", help="只导出，不上传")
     parser.add_argument("--save-credentials", action="store_true", help="交互输入门户账号并加密保存后退出")
@@ -268,3 +268,4 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

@@ -1,4 +1,4 @@
-"""Export portal notices into an uploadable bundle.
+﻿"""Export portal notices into an uploadable bundle.
 
 Run this on a machine that can reach the campus portal (manual login). The
 server never authenticates to the portal; it only imports the produced file:
@@ -263,7 +263,7 @@ def main(argv=None) -> int:
     parser.add_argument("--config", default="portal_client.yaml")
     parser.add_argument("--out", default="")
     parser.add_argument("--days", type=int, default=90)
-    parser.add_argument("--max", type=int, default=300)
+    parser.add_argument("--max", type=int, default=400)
     parser.add_argument("--gzip", action="store_true")
     parser.add_argument("--browser", default=None, help="edge（默认）/ chrome / chromium")
     parser.add_argument("--browser-path", default=None, help="浏览器可执行文件绝对路径；留空用通道查找")
@@ -300,3 +300,4 @@ def main(argv=None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
