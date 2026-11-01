@@ -1,6 +1,12 @@
-# 复制为 portal_client.yaml 后，按本人已授权的门户页面校准。
+# BUPT Insight 信息门户客户端默认配置。
 #
-# 只在本机运行，不要提交这个文件（含个人门户路径与服务器地址）。
+# 复制为 portal_client.yaml 后使用：
+#     cp portal_client.example.yaml portal_client.yaml
+#     python -X utf8 tools/portal_sync.py --save-credentials
+#     python -X utf8 tools/portal_sync.py
+#
+# 已内置北邮信息门户的三个默认列表；通常只需填写下方 server 段并保存凭据。
+# 学校改版时再按实际页面校准选择器。本文件不含账号、密码、域名或服务器地址。
 
 # 登录方式：http = 直接提交官方 CAS 表单（推荐，绕过自动化下空白的登录 iframe）
 #           browser = Playwright 打开 Edge 人工登录
@@ -21,20 +27,42 @@ login_timeout: 600        # browser 模式等待人工登录的秒数
 identity_selector: ".topinner"   # 登录后才会出现的身份区域，用于确认已登录
 
 lists:
-  - name: "通知公告"
-    url: "http://my.bupt.edu.cn"      # 通知列表所在页面；也可填具体列表 URL
+  - name: "校内通知"
+    url: "http://my.bupt.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=1154"
     row_selector: "ul.newslist > li"
     link_selector: "a"
-    date_selector: ""        # 留空则从行文本里提取日期
-    source_selector: ""      # 留空则用栏目名作为发布部门
+    date_selector: "span.time"
+    source_selector: "span.author"
     body_selector: "#vsb_content .v_news_content"
+    pages: 10
 
-  # 需要多个栏目时照此追加；name 会作为通知的“发布部门/栏目”。
+  - name: "校内新闻"
+    url: "http://my.bupt.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=1221"
+    row_selector: "ul.newslist > li"
+    link_selector: "a"
+    date_selector: "span.time"
+    source_selector: "span.author"
+    body_selector: "#vsb_content .v_news_content"
+    pages: 5
+
+  - name: "校内文件"
+    url: "http://my.bupt.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=2001"
+    row_selector: "ul.newslist > li"
+    link_selector: "a"
+    date_selector: "span.time"
+    source_selector: "span.author"
+    body_selector: "#vsb_content .v_news_content"
+    pages: 2
+
+  # 需要更多栏目时照此追加；name 会作为通知的“发布部门/栏目”。
   # - name: "科研院"
-  #   url: "http://my.bupt.edu.cn/..."
+  #   url: "http://my.bupt.edu.cn/list.jsp?urltype=tree.TreeTempUrl&wbtreeid=XXXX"
   #   row_selector: "ul.newslist > li"
   #   link_selector: "a"
+  #   date_selector: "span.time"
+  #   source_selector: "span.author"
   #   body_selector: "#vsb_content .v_news_content"
+  #   pages: 2
 
 # tools/portal_sync.py 用这一段完成上传与服务器导入。
 server:

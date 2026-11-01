@@ -157,7 +157,7 @@ sudo systemctl enable --now bupt-insight-web.service
 本机导出（在能访问门户的电脑上）：
 
 ```bash
-cp portal_client.example.yaml portal_client.yaml   # 校准列表 URL/选择器与 server
+cp portal_client.example.yaml portal_client.yaml   # 已内置校内通知/新闻/文件，填好 server 即可
 python -X utf8 tools/portal_sync.py --save-credentials   # 一次，密码加密保存
 python -X utf8 tools/portal_sync.py                      # 导出 → 上传 → 服务器导入
 ```

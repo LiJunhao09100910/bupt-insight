@@ -61,7 +61,7 @@ CAS 回调也无法完成。因此本项目不提供服务端门户采集，而�
 ## 一条命令：导出 → 上传 → 导入
 
 ```bash
-cp portal_client.example.yaml portal_client.yaml   # 校准列表/选择器，填写 server
+cp portal_client.example.yaml portal_client.yaml   # 已内置校内通知/新闻/文件，填写 server
 python -X utf8 tools/portal_sync.py --save-credentials   # 一次，密码加密保存
 python -X utf8 tools/portal_sync.py
 ```
