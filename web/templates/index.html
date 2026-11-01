@@ -7,8 +7,8 @@
   <meta name="theme-color" content="#255c4b">
   <title>BUPT Insight · 校园信息</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%23255c4b'/%3E%3Cpath d='M12 10h9a5 5 0 010 10h-9m0 0h10a5 5 0 010 10H12V10' stroke='white' stroke-width='3' fill='none'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/static/reader.css">
-  <script defer src="/static/reader.js"></script>
+  <link rel="stylesheet" href="/static/reader.css?v={{ asset_version }}">
+  <script defer src="/static/reader.js?v={{ asset_version }}"></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">跳到主要内容</a>
@@ -17,8 +17,13 @@
     <div class="nav-label">发现与阅读 <span>WORKSPACE</span></div>
     <nav id="navigation" aria-label="信息流视图">
       <button data-view="recommended" class="nav-item active" aria-current="page"><span class="nav-symbol">✦</span><span>为你推荐</span><b id="nav-recommended"></b></button>
-      <button data-view="research" class="nav-item"><span class="nav-symbol">⌁</span><span>本科科研招募</span></button>
       <button data-view="latest" class="nav-item"><span class="nav-symbol">◷</span><span>最新收录</span></button>
+      <button data-view="research" class="nav-item"><span class="nav-symbol">⌁</span><span>科研机会</span></button>
+      <button data-view="competition" class="nav-item"><span class="nav-symbol">⚑</span><span>竞赛</span></button>
+      <button data-view="internship" class="nav-item"><span class="nav-symbol">◈</span><span>实习就业</span></button>
+      <button data-view="electronics" class="nav-item"><span class="nav-symbol">⌬</span><span>电子科创</span></button>
+      <button data-view="event" class="nav-item"><span class="nav-symbol">✧</span><span>校园活动</span></button>
+      <button data-view="mandatory_academic" class="nav-item"><span class="nav-symbol">▣</span><span>教务通知</span></button>
       <div class="nav-divider" aria-hidden="true"></div>
       <button data-view="unread" class="nav-item"><span class="nav-symbol">◉</span><span>未读信息</span><b id="nav-unread">—</b></button>
       <button data-view="favorites" class="nav-item"><span class="nav-symbol">☆</span><span>我的收藏</span><b id="nav-favorites"></b></button>

@@ -118,3 +118,79 @@ def test_status_reports_byr(cfg, notice):
     payload = client(cfg).get("/api/status", headers={"Host": HOST}).get_json()
     assert list(payload["sources"]) == ["byr"]
     assert payload["privacy"] == "local"
+
+from datetime import datetime, timedelta, timezone
+
+from core.schema import Item
+
+
+def topic_item(title, days_ago, channel="兼职实习信息", body="虚构正文，欢迎报名。"):
+    day = datetime.now(timezone(timedelta(hours=8))).date() - timedelta(days=days_ago)
+    return Item(
+        source="byr",
+        channel=channel,
+        title=title,
+        url=f"https://bbs.byr.cn/article/Paper/{abs(hash(title)) % 1000000}",
+        published=day.isoformat() + " 10:00:00",
+        body=body,
+        extra={"body_status": "ok"},
+    )
+
+
+def feed(cfg, query):
+    return client(cfg).get("/api/feed?" + query, headers={"Host": HOST}).get_json()
+
+
+def test_latest_is_limited_to_recent_window(cfg):
+    seed(cfg, topic_item("实习招聘", 5))
+    seed(cfg, topic_item("实验室招募科研助理", 120, body="课题组招募本科生参与科研。"))
+    payload = feed(cfg, "view=latest&sort=collected")
+    assert payload["total"] == 1
+    assert payload["items"][0]["title"] == "实习招聘"
+
+
+def test_latest_keeps_topic_filter(cfg):
+    seed(cfg, topic_item("实习招聘", 5))
+    seed(cfg, topic_item("程序设计竞赛报名", 6))
+    assert feed(cfg, "view=latest&sort=collected")["total"] == 2
+    narrowed = feed(cfg, "view=latest&sort=collected&category=internship")
+    assert narrowed["total"] == 1
+    assert narrowed["items"][0]["category"] == "internship"
+
+
+def test_category_view_has_no_time_limit(cfg):
+    seed(cfg, topic_item("实习招聘", 200))
+    seed(cfg, topic_item("实验室招募科研助理", 5, body="课题组招募本科生参与科研。"))
+    payload = feed(cfg, "view=internship")
+    assert payload["total"] == 1
+    assert payload["items"][0]["title"] == "实习招聘"
+
+
+def test_category_view_ignores_subcategory_parameter(cfg):
+    seed(cfg, topic_item("实习招聘", 5))
+    seed(cfg, topic_item("实验室招募科研助理", 5, body="课题组招募本科生参与科研。"))
+    payload = feed(cfg, "view=internship&category=research")
+    assert payload["total"] == 1
+    assert payload["items"][0]["category"] == "internship"
+
+
+def test_category_views_cover_the_six_topics(cfg):
+    seed(cfg, topic_item("实验室招募科研助理", 3, body="课题组招募本科生参与科研。"))
+    seed(cfg, topic_item("程序设计竞赛报名", 3))
+    seed(cfg, topic_item("实习招聘", 3))
+    seed(cfg, topic_item("嵌入式硬件开发招募", 3))
+    seed(cfg, topic_item("学术讲座通知", 3))
+    seed(cfg, topic_item("选课通知", 3, channel="北邮教务处"))
+    expected = {
+        "research": "实验室招募科研助理",
+        "competition": "程序设计竞赛报名",
+        "internship": "实习招聘",
+        "electronics": "嵌入式硬件开发招募",
+        "event": "学术讲座通知",
+        "mandatory_academic": "选课通知",
+    }
+    for view, title in expected.items():
+        payload = feed(cfg, f"view={view}")
+        assert payload["total"] == 1, view
+        assert payload["items"][0]["title"] == title
+        assert payload["items"][0]["category"] == view

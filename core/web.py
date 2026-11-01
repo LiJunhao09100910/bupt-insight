@@ -33,6 +33,11 @@ CATEGORIES = {
     "administration": "校务人事",
 }
 
+# Views that show one topic across the whole archive (no time window).
+CATEGORY_VIEWS = {"research", "competition", "internship", "electronics", "event", "mandatory_academic"}
+# "最新收录" keeps the collection-time ordering but only the recent window.
+LATEST_WINDOW_DAYS = 90
+
 
 def safe_url(value):
     try:
@@ -49,6 +54,17 @@ def _as_date(value):
         return date.fromisoformat(str(value)[:10])
     except (TypeError, ValueError):
         return None
+
+
+def _asset_version() -> str:
+    """Cache-busting token for /static assets; nginx may cache them for days."""
+    try:
+        newest = max(
+            (ROOT / "web/static" / name).stat().st_mtime for name in ("reader.js", "reader.css")
+        )
+        return str(int(newest))
+    except OSError:
+        return "1"
 
 
 def create_app(config=None, port: int | None = None):
@@ -139,7 +155,12 @@ def create_app(config=None, port: int | None = None):
     @app.get("/")
     def home():
         session["csrf"] = random_secrets.token_hex(24)
-        return render_template("index.html", csrf=session["csrf"], site_title=cfg["site"].get("title", "BUPT Insight"))
+        return render_template(
+            "index.html",
+            csrf=session["csrf"],
+            site_title=cfg["site"].get("title", "BUPT Insight"),
+            asset_version=_asset_version(),
+        )
 
     def decorate(row, profile, states, events):
         from core.analysis import rules
@@ -221,6 +242,9 @@ def create_app(config=None, port: int | None = None):
         query = request.args.get("q", "").strip().casefold()[:200]
         category = request.args.get("category", "")
         source_filter = request.args.get("source", "")
+        from core.curation import eligible, today as curation_today
+
+        current_day = curation_today(cfg)
         filtered = []
         for item, raw in zip(items, rows):
             if view == "hidden" and not item["hidden"]:
@@ -231,21 +255,19 @@ def create_app(config=None, port: int | None = None):
                 continue
             if view == "unread" and not item["unread"]:
                 continue
-            if view == "research":
-                from core.curation import today
-
+            if view == "latest":
+                # Recent window only; the topic chips still narrow it further.
                 published = _as_date(item["published"])
-                if published is None:
+                if published is None or not 0 <= (current_day - published).days <= LATEST_WINDOW_DAYS:
                     continue
-                age = (today(cfg) - published).days
-                if not 0 <= age <= 90 or not item["research"]["candidate"]:
+            elif view in CATEGORY_VIEWS:
+                # One topic, whole archive: no time window and no sub-category.
+                if item["category"] != view:
                     continue
-            if view == "recommended":
-                from core.curation import eligible, today as curation_today
-
-                if not eligible(item, curation_today(cfg)):
+            elif view == "recommended":
+                if not eligible(item, current_day):
                     continue
-            if category and item["category"] != category:
+            if category and view not in CATEGORY_VIEWS and item["category"] != category:
                 continue
             if source_filter and item["source"] != source_filter:
                 continue
