@@ -1,4 +1,4 @@
-# BUPT Insight 配置模板（仅 BYR 论坛信息源）
+# BUPT Insight 配置模板（BYR 论坛 + 可选信息门户手动导入）
 #
 # 复制为 config.yaml 后修改。密码不写在这里：运行
 #     python -X utf8 run.py credentials save
@@ -20,6 +20,11 @@ site:
 server:
   host: 127.0.0.1             # 只监听本机，由 nginx 反代；不要改成 0.0.0.0
   port: 8000
+
+filters:
+  # “不包含”式屏蔽：标题包含任一词的条目不会进入阅读页。
+  # 默认过滤“科研资金公示”等大量噪声；设为 [] 可关闭。
+  block_titles: ["公示"]
 
 net:
   browser: chrome             # chrome / chromium / edge；也可用 executable_path 指定

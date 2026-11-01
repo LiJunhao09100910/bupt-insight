@@ -232,13 +232,18 @@ def create_app(config=None, port: int | None = None):
         events = all_feedback(path, reader, profile)
         rows = get_rows(path)
         items = [decorate(r, profile, states, events) for r in rows]
+        from core.curation import blocked
+
+        pairs = [(item, raw) for item, raw in zip(items, rows) if not blocked(item, cfg)]
+        items = [item for item, _ in pairs]
+        rows = [raw for _, raw in pairs]
         counts = {
             "all": len(items),
             "unread": sum(i["unread"] for i in items),
             "favorites": sum(i["favorite"] for i in items),
             "hidden": sum(i["hidden"] for i in items),
         }
-        view = request.args.get("view", "recommended")
+        view = request.args.get("view", "latest")
         query = request.args.get("q", "").strip().casefold()[:200]
         category = request.args.get("category", "")
         source_filter = request.args.get("source", "")

@@ -8,7 +8,8 @@ from datetime import date, datetime, timedelta, timezone
 
 log = logging.getLogger(__name__)
 
-VERSION = "reader-focus-v4-byr"
+VERSION = "reader-focus-v5-byr"
+DEFAULT_BLOCK_TITLES = ("公示",)
 TOPICS = {
     "internship": r"实习|招聘|内推|兼职|校招",
     "competition": r"竞赛|比赛|建模|挑战赛|电赛|美赛",
@@ -34,6 +35,19 @@ def today(cfg=None):
         except Exception:
             pass
     return datetime.now(zone).date()
+
+
+def block_titles(cfg=None):
+    """Configured title terms excluded entirely: an explicit "does not contain" rule."""
+    configured = (cfg or {}).get("filters", {}).get("block_titles")
+    words = DEFAULT_BLOCK_TITLES if configured is None else configured
+    return tuple(str(word).strip() for word in words if str(word).strip())
+
+
+def blocked(item, cfg=None):
+    """True when the title contains any blocked term (e.g. 科研资金公示)."""
+    title = (item.get("title") or "").casefold()
+    return any(word.casefold() in title for word in block_titles(cfg))
 
 
 def classify(item, profile, cfg=None):

@@ -48,6 +48,44 @@ def test_feed_returns_byr_notice(cfg, notice):
     assert payload["counts"]["all"] == 1
 
 
+def test_blocked_title_is_excluded(cfg):
+    from core.schema import Item
+
+    item = Item(
+        source="portal",
+        channel="科研院",
+        title="关于2026年度科研资金公示",
+        url="http://my.bupt.edu.cn/view?id=9001",
+        published="2026-10-30 09:00",
+        body="公示内容",
+        private=True,
+        extra={},
+    )
+    seed(cfg, item)
+    payload = client(cfg).get("/api/feed?view=all", headers={"Host": HOST}).get_json()
+    assert payload["total"] == 0
+    assert payload["counts"]["all"] == 0
+
+
+def test_block_titles_can_be_disabled(cfg):
+    from core.schema import Item
+
+    cfg["filters"] = {"block_titles": []}
+    item = Item(
+        source="portal",
+        channel="科研院",
+        title="关于2026年度科研资金公示",
+        url="http://my.bupt.edu.cn/view?id=9002",
+        published="2026-10-30 09:00",
+        body="公示内容",
+        private=True,
+        extra={},
+    )
+    seed(cfg, item)
+    payload = client(cfg).get("/api/feed?view=all", headers={"Host": HOST}).get_json()
+    assert payload["total"] == 1
+
+
 def test_recommended_is_empty_for_an_empty_profile(cfg, notice):
     seed(cfg, notice)
     payload = client(cfg).get("/api/feed?view=recommended", headers={"Host": HOST}).get_json()

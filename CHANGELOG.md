@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 阅读页默认屏蔽标题含“公示”的条目（`filters.block_titles` 可配置），用于过滤科研资金
+  公示等噪声；移除“为你推荐”导航，默认进入“最新收录”
 - 新增信息门户手动导入：校网电脑用 `tools/portal_sync.py` 登录/导出 bundle，
   服务器用 `run.py portal import` 校验、版本化入库；阅读页与 BYR 同库展示
 - 门户凭据只保存在导出端的加密存储，服务器不保存门户账号；bundle 含内容哈希，
